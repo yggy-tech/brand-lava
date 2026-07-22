@@ -18,6 +18,19 @@ export type BrandLavaFieldProps = {
 		intensity?: number;
 		color?: string;
 	};
+	connections?: {
+		mode?: "none" | "tendrils";
+		count?: number;
+		radius?: number;
+		curvature?: number;
+		blend?: number;
+	};
+	depthOfField?: {
+		enabled?: boolean;
+		focus?: number;
+		range?: number;
+		strength?: number;
+	};
 	blobCount?: number;
 	blobSize?: number;
 	distribution?: BrandLavaDistribution;
@@ -51,6 +64,12 @@ type BlobState = {
 	offsetY: number;
 	phase: number;
 	radiusSeed: number;
+};
+
+type TendrilLink = {
+	from: number;
+	to: number;
+	bend: number;
 };
 
 function cssColorToRgb(value: string, fallback: Rgb): Rgb {
@@ -174,6 +193,10 @@ const fragmentSource = `
 	uniform vec4 uLavaShape;
 	uniform vec4 uLavaMotion;
 	uniform vec4 uBlobSpheres[12];
+	uniform vec4 uTendrilStart[6];
+	uniform vec4 uTendrilControl[6];
+	uniform vec4 uTendrilEnd[6];
+	uniform vec4 uDepthOfField;
 
 	float smin(float a, float b, float k) {
 		float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
@@ -196,6 +219,31 @@ const fragmentSource = `
 		return length(p - c) - r;
 	}
 
+	float sdCapsule(vec3 p, vec3 a, vec3 b, float r) {
+		vec3 pa = p - a;
+		vec3 ba = b - a;
+		float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+		return length(pa - ba * h) - r;
+	}
+
+	vec3 quadraticPoint(vec3 a, vec3 b, vec3 c, float t) {
+		float inv = 1.0 - t;
+		return inv * inv * a + 2.0 * inv * t * b + t * t * c;
+	}
+
+	float sdTendril(vec3 p, vec3 a, vec3 b, vec3 c, float r) {
+		float d = 8.0;
+		vec3 previous = a;
+		for (int i = 1; i <= 5; i++) {
+			float t = float(i) / 5.0;
+			vec3 next = quadraticPoint(a, b, c, t);
+			float taper = mix(1.0, 0.58, abs(t - 0.5) * 2.0);
+			d = min(d, sdCapsule(p, previous, next, r * taper));
+			previous = next;
+		}
+		return d;
+	}
+
 	float mapField(vec3 p, float t) {
 		float d = 8.0;
 
@@ -204,27 +252,16 @@ const fragmentSource = `
 			d = smin(d, sdSphere(p, sphere.xyz, sphere.w), uLavaShape.w);
 		}
 
-		return d;
-	}
-
-	float nearConnection(vec3 p) {
-		float nearest = 8.0;
-		float secondNearest = 8.0;
-
-		for (int i = 0; i < 12; i++) {
-			vec4 sphere = uBlobSpheres[i];
-			float d = sdSphere(p, sphere.xyz, sphere.w);
-			if (d < nearest) {
-				secondNearest = nearest;
-				nearest = d;
-			} else if (d < secondNearest) {
-				secondNearest = d;
+		for (int i = 0; i < 6; i++) {
+			vec4 start = uTendrilStart[i];
+			vec4 control = uTendrilControl[i];
+			vec4 end = uTendrilEnd[i];
+			if (end.w > 0.0) {
+				d = smin(d, sdTendril(p, start.xyz, control.xyz, end.xyz, start.w), control.w);
 			}
 		}
 
-		float bridge = smoothstep(uLavaShape.w * 1.7, 0.0, nearest + secondNearest);
-		float outsideSurface = smoothstep(0.0, uLavaShape.w * 0.8, nearest);
-		return bridge * outsideSurface;
+		return d;
 	}
 
 	vec3 normalAt(vec3 p, float t) {
@@ -283,15 +320,17 @@ const fragmentSource = `
 			color = lava;
 		}
 
-		float graphBridge = nearConnection(p) * 0.24;
-		color = mix(color, uLavaA, graphBridge);
-
 		for (int i = 0; i < 4; i++) {
 			vec4 highlight = uHighlights[i];
 			float area = smoothstep(highlight.z, 0.0, length(screenUv - highlight.xy)) * highlight.w;
 			color = mix(color, uHighlightColors[i], area);
 			color += uHighlightColors[i] * area * 0.16;
 		}
+
+		float blurAmount = smoothstep(0.0, uDepthOfField.y, abs(travel - uDepthOfField.x)) * uDepthOfField.z * uDepthOfField.w;
+		vec3 defocused = mix(color, uBackground, 0.32);
+		defocused = mix(defocused, uCard, smoothstep(1.2, 0.0, length(uv)) * 0.18);
+		color = mix(color, defocused, blurAmount);
 
 		float vignette = smoothstep(1.35, 0.12, length(uv) * 1.05);
 		float dither = fract((gl_FragCoord.x + gl_FragCoord.y * 1.61803398875) * 0.5) - 0.5;
@@ -337,6 +376,15 @@ function normalizeLavaControls(props: BrandLavaFieldProps) {
 		mergeSmoothness: Math.max(0.05, Math.min(1.1, props.mergeSmoothness ?? 0.42)),
 		clickPulseStrength: Math.max(0, Math.min(2, props.clickPulse?.strength ?? 0.9)),
 		clickPulseDecay: Math.max(0.72, Math.min(0.98, props.clickPulse?.decay ?? 0.93)),
+		connectionMode: props.connections?.mode ?? "none",
+		connectionCount: Math.max(0, Math.min(6, Math.round(props.connections?.count ?? 4))),
+		connectionRadius: Math.max(0.02, Math.min(0.28, props.connections?.radius ?? 0.075)),
+		connectionCurvature: Math.max(0, Math.min(1.2, props.connections?.curvature ?? 0.46)),
+		connectionBlend: Math.max(0.005, Math.min(0.16, props.connections?.blend ?? 0.04)),
+		dofEnabled: props.depthOfField?.enabled === true ? 1 : 0,
+		dofFocus: Math.max(0.5, Math.min(7, props.depthOfField?.focus ?? 4.2)),
+		dofRange: Math.max(0.05, Math.min(3, props.depthOfField?.range ?? 1.1)),
+		dofStrength: Math.max(0, Math.min(1, props.depthOfField?.strength ?? 0.34)),
 	};
 }
 
@@ -354,6 +402,17 @@ function createBlobStates(): BlobState[] {
 		phase: index * 1.61803,
 		radiusSeed: Math.sin(index * 127.1) * 0.5 + 0.5,
 	}));
+}
+
+function createTendrilLinks(): TendrilLink[] {
+	return [
+		{ from: 1, to: 4, bend: 1 },
+		{ from: 3, to: 7, bend: -1 },
+		{ from: 6, to: 10, bend: 0.75 },
+		{ from: 8, to: 11, bend: -0.65 },
+		{ from: 2, to: 5, bend: 0.55 },
+		{ from: 4, to: 9, bend: -0.85 },
+	];
 }
 
 function updateBlobStates(
@@ -436,6 +495,8 @@ function pushBlobPulse(
 export function BrandLavaField({
 	highlights,
 	cursorLight,
+	connections,
+	depthOfField,
 	blobCount,
 	blobSize,
 	distribution,
@@ -458,6 +519,8 @@ export function BrandLavaField({
 			attraction,
 			mergeSmoothness,
 			clickPulse,
+			connections,
+			depthOfField,
 		}),
 	);
 	const cursorLightRef = useRef({
@@ -476,6 +539,8 @@ export function BrandLavaField({
 		attraction,
 		mergeSmoothness,
 		clickPulse,
+		connections,
+		depthOfField,
 	});
 	cursorLightRef.current = {
 		radius: Math.max(0.01, Math.min(1, cursorLight?.radius ?? 0.34)),
@@ -519,6 +584,10 @@ export function BrandLavaField({
 		let lavaShapeLocation: WebGLUniformLocation | null = null;
 		let lavaMotionLocation: WebGLUniformLocation | null = null;
 		let blobSphereLocations: (WebGLUniformLocation | null)[] = [];
+		let tendrilStartLocations: (WebGLUniformLocation | null)[] = [];
+		let tendrilControlLocations: (WebGLUniformLocation | null)[] = [];
+		let tendrilEndLocations: (WebGLUniformLocation | null)[] = [];
+		let depthOfFieldLocation: WebGLUniformLocation | null = null;
 
 		try {
 			program = createProgram(gl, vertexSource, fragmentSource);
@@ -547,6 +616,14 @@ export function BrandLavaField({
 			blobSphereLocations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) =>
 				gl.getUniformLocation(program, `uBlobSpheres[${index}]`),
 			);
+			tendrilStartLocations = [0, 1, 2, 3, 4, 5].map((index) =>
+				gl.getUniformLocation(program, `uTendrilStart[${index}]`),
+			);
+			tendrilControlLocations = [0, 1, 2, 3, 4, 5].map((index) =>
+				gl.getUniformLocation(program, `uTendrilControl[${index}]`),
+			);
+			tendrilEndLocations = [0, 1, 2, 3, 4, 5].map((index) => gl.getUniformLocation(program, `uTendrilEnd[${index}]`));
+			depthOfFieldLocation = gl.getUniformLocation(program, "uDepthOfField");
 
 			if (
 				resolutionLocation === null ||
@@ -561,7 +638,11 @@ export function BrandLavaField({
 				cursorLightColorLocation === null ||
 				lavaShapeLocation === null ||
 				lavaMotionLocation === null ||
+				depthOfFieldLocation === null ||
 				blobSphereLocations.some((location) => location === null) ||
+				tendrilStartLocations.some((location) => location === null) ||
+				tendrilControlLocations.some((location) => location === null) ||
+				tendrilEndLocations.some((location) => location === null) ||
 				highlightLocations.some((location) => location === null) ||
 				highlightColorLocations.some((location) => location === null) ||
 				positionLocation < 0
@@ -588,6 +669,7 @@ export function BrandLavaField({
 		const mouse = { x: 0.5, y: 0.5 };
 		const targetMouse = { x: 0.5, y: 0.5 };
 		const blobs = createBlobStates();
+		const tendrils = createTendrilLinks();
 		const onMove = (event: PointerEvent) => {
 			const rect = root.getBoundingClientRect();
 			targetMouse.x = (event.clientX - rect.left) / rect.width;
@@ -633,7 +715,8 @@ export function BrandLavaField({
 				!cursorLightLocation ||
 				!cursorLightColorLocation ||
 				!lavaShapeLocation ||
-				!lavaMotionLocation
+				!lavaMotionLocation ||
+				!depthOfFieldLocation
 			) {
 				return;
 			}
@@ -659,6 +742,13 @@ export function BrandLavaField({
 				lavaControls.mergeSmoothness,
 			);
 			gl.uniform4f(lavaMotionLocation, lavaControls.speed, 0, lavaControls.gravity, lavaControls.attraction);
+			gl.uniform4f(
+				depthOfFieldLocation,
+				lavaControls.dofFocus,
+				lavaControls.dofRange,
+				lavaControls.dofStrength,
+				lavaControls.dofEnabled,
+			);
 			for (const [index, location] of blobSphereLocations.entries()) {
 				if (!location) {
 					continue;
@@ -671,6 +761,39 @@ export function BrandLavaField({
 						lavaControls.blobSize
 					: 0;
 				gl.uniform4f(location, blob.x, blob.y, blob.z, radius);
+			}
+			for (const [index, location] of tendrilStartLocations.entries()) {
+				const controlLocation = tendrilControlLocations[index];
+				const endLocation = tendrilEndLocations[index];
+				if (!location || !controlLocation || !endLocation) {
+					continue;
+				}
+				const tendril = tendrils[index];
+				const enabled =
+					lavaControls.connectionMode === "tendrils" &&
+					index < lavaControls.connectionCount &&
+					tendril.from < lavaControls.blobCount &&
+					tendril.to < lavaControls.blobCount
+						? 1
+						: 0;
+				const from = blobs[tendril.from];
+				const to = blobs[tendril.to];
+				const dx = to.x - from.x;
+				const dy = to.y - from.y;
+				const distance = Math.max(0.001, Math.hypot(dx, dy));
+				const normalX = -dy / distance;
+				const normalY = dx / distance;
+				const curve = lavaControls.connectionCurvature * tendril.bend * Math.min(0.34, distance * 0.22);
+				const radius = lavaControls.connectionRadius * lavaControls.blobSize * enabled;
+				gl.uniform4f(location, from.x + dx * 0.18, from.y + dy * 0.18, from.z, radius);
+				gl.uniform4f(
+					controlLocation,
+					(from.x + to.x) * 0.5 + normalX * curve,
+					(from.y + to.y) * 0.5 + normalY * curve,
+					(from.z + to.z) * 0.5,
+					lavaControls.connectionBlend,
+				);
+				gl.uniform4f(endLocation, to.x - dx * 0.18, to.y - dy * 0.18, to.z, enabled);
 			}
 			gl.uniform4f(
 				cursorLightLocation,
