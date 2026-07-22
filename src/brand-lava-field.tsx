@@ -224,7 +224,7 @@ const fragmentSource = `
 			vec4 a = uBlobCapsuleA[i];
 			vec4 b = uBlobCapsuleB[i];
 			if (b.w > 0.0) {
-				d = smin(d, sdCapsule(p, a.xyz, b.xyz, a.w), a.w * 0.55);
+				d = smin(d, sdCapsule(p, a.xyz, b.xyz, a.w), a.w * 0.22);
 			}
 		}
 
@@ -359,14 +359,14 @@ function createBlobStates(): BlobState[] {
 
 function createBlobLinks(): BlobLink[] {
 	return [
-		{ from: 0, to: 2, radiusScale: 0.22, enabled: 1 },
-		{ from: 1, to: 4, radiusScale: 0.18, enabled: 1 },
-		{ from: 2, to: 5, radiusScale: 0.2, enabled: 1 },
-		{ from: 3, to: 7, radiusScale: 0.16, enabled: 1 },
-		{ from: 5, to: 8, radiusScale: 0.18, enabled: 1 },
-		{ from: 6, to: 10, radiusScale: 0.15, enabled: 1 },
-		{ from: 8, to: 11, radiusScale: 0.2, enabled: 1 },
-		{ from: 4, to: 9, radiusScale: 0.14, enabled: 1 },
+		{ from: 1, to: 4, radiusScale: 0.08, enabled: 1 },
+		{ from: 3, to: 7, radiusScale: 0.07, enabled: 1 },
+		{ from: 6, to: 10, radiusScale: 0.06, enabled: 1 },
+		{ from: 8, to: 11, radiusScale: 0.07, enabled: 1 },
+		{ from: 0, to: 2, radiusScale: 0.05, enabled: 0 },
+		{ from: 2, to: 5, radiusScale: 0.05, enabled: 0 },
+		{ from: 5, to: 8, radiusScale: 0.05, enabled: 0 },
+		{ from: 4, to: 9, radiusScale: 0.05, enabled: 0 },
 	];
 }
 
@@ -715,8 +715,20 @@ export function BrandLavaField({
 						0.035 * Math.sin(time * 0.00036 * lavaControls.speed + link.to)) *
 					lavaControls.blobSize;
 				const radius = Math.min(fromRadius, toRadius) * link.radiusScale * enabled;
-				gl.uniform4f(location, from.x, from.y, from.z, radius);
-				gl.uniform4f(endLocation, to.x, to.y, to.z, enabled);
+				const dx = to.x - from.x;
+				const dy = to.y - from.y;
+				const dz = to.z - from.z;
+				const distance = Math.max(0.001, Math.hypot(dx, dy, dz));
+				const trim = Math.min(0.42, Math.min(fromRadius, toRadius) * 1.12);
+				const ax = from.x + (dx / distance) * trim;
+				const ay = from.y + (dy / distance) * trim;
+				const az = from.z + (dz / distance) * trim;
+				const bx = to.x - (dx / distance) * trim;
+				const by = to.y - (dy / distance) * trim;
+				const bz = to.z - (dz / distance) * trim;
+				const longEnough = distance > trim * 2.4 ? enabled : 0;
+				gl.uniform4f(location, ax, ay, az, radius * longEnough);
+				gl.uniform4f(endLocation, bx, by, bz, longEnough);
 			}
 			gl.uniform4f(
 				cursorLightLocation,
