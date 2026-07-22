@@ -151,13 +151,13 @@ function createSatelliteBlobs(): SatelliteBlob[] {
 
 function staticNodeY(index: number, controls: ReturnType<typeof normalizeLavaControls>): number | null {
 	if (controls.staticBottom && index === 0) {
-		return -1.35;
+		return clampRange(-0.62, controls.boundsY);
 	}
 	if (controls.staticCenter && index === Math.floor((controls.blobCount - 1) / 2)) {
-		return 0;
+		return clampRange(0, controls.boundsY);
 	}
 	if (controls.staticTop && index === controls.blobCount - 1) {
-		return 1.48;
+		return clampRange(0.62, controls.boundsY);
 	}
 	return null;
 }
