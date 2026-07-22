@@ -191,7 +191,9 @@ const fragmentSource = `
 		float drift = (0.28 + hash(index) * 0.24) * mix(0.72, 1.34, distribution);
 		float level = -1.05 + index * mix(0.24, 0.33, distribution);
 		level -= uLavaMotion.z * (0.1 + hash(index + 4.0) * 0.24);
-		level += uLavaMotion.y * (0.2 + hash(index + 7.0) * 0.34);
+		vec2 pulseOrigin = (uCursorLight.xy - 0.5) * vec2(1.1, 2.0);
+		float pulseFalloff = smoothstep(1.35, 0.0, length(vec2(drift * cos(phase), level) - pulseOrigin));
+		level += uLavaMotion.y * pulseFalloff * (0.22 + hash(index + 7.0) * 0.38);
 		return vec3(
 			cos(phase + 0.7 * sin(t * 0.38 + index * 1.1)) * drift,
 			level + sin(phase * 0.9 + t * 0.42) * mix(0.08, 0.16, distribution),
