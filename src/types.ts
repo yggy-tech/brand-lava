@@ -8,6 +8,13 @@ export type BrandLavaHighlight = {
 
 export type BrandLavaDistribution = "column" | "balanced" | "spread";
 
+export type BrandLavaStaticNode = {
+	x: number;
+	y: number;
+	z?: number;
+	radius: number;
+};
+
 export type BrandLavaFieldProps = {
 	highlights?: readonly BrandLavaHighlight[];
 	cursorLight?: {
@@ -43,10 +50,12 @@ export type BrandLavaFieldProps = {
 		z?: readonly [number, number];
 		bounce?: number;
 	};
-	staticNodes?: {
-		top?: boolean;
-		center?: boolean;
-		bottom?: boolean;
+	staticNodes?: readonly BrandLavaStaticNode[];
+	camera?: {
+		projection?: "orthographic" | "perspective";
+		distance?: number;
+		scale?: number;
+		focalLength?: number;
 	};
 	blobCount?: number;
 	blobSize?: number;

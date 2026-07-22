@@ -23,7 +23,9 @@ export const fragmentSource = `
 	uniform vec3 uCursorLightColor;
 	uniform vec4 uLavaShape;
 	uniform vec4 uLavaMotion;
+	uniform vec4 uCamera;
 	uniform vec4 uBlobSpheres[12];
+	uniform vec4 uStaticSpheres[3];
 	uniform vec4 uConnectionStart[12];
 	uniform vec4 uConnectionEnd[12];
 
@@ -55,6 +57,13 @@ export const fragmentSource = `
 			}
 		}
 
+		for (int i = 0; i < 3; i++) {
+			vec4 sphere = uStaticSpheres[i];
+			if (sphere.w > 0.001) {
+				d = smin(d, sdSphere(p, sphere.xyz, sphere.w), uLavaShape.w);
+			}
+		}
+
 		for (int i = 0; i < 12; i++) {
 			vec4 start = uConnectionStart[i];
 			vec4 end = uConnectionEnd[i];
@@ -76,8 +85,10 @@ export const fragmentSource = `
 	}
 
 	vec3 shadeRay(vec2 uv, float time, out float travelOut, out float hitOut) {
-		vec3 ro = vec3(uv * 1.42, 4.45);
-		vec3 rd = vec3(0.0, 0.0, -1.0);
+		vec3 orthographicOrigin = vec3(uv * uCamera.z, uCamera.y);
+		vec3 perspectiveDirection = normalize(vec3(uv * uCamera.z, -uCamera.w));
+		vec3 ro = mix(orthographicOrigin, vec3(0.0, 0.0, uCamera.y), uCamera.x);
+		vec3 rd = mix(vec3(0.0, 0.0, -1.0), perspectiveDirection, uCamera.x);
 		float travel = 0.0;
 		float hit = 0.0;
 		float maxDist = 7.0;

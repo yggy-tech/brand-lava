@@ -70,9 +70,11 @@ function normalizeLavaControls(props: BrandLavaFieldProps) {
 		boundsZ: props.bounds?.z ?? ([-0.36, 0.36] as const),
 		zDepthScale: Math.max(0.2, Math.min(4, ((props.bounds?.z?.[1] ?? 0.36) - (props.bounds?.z?.[0] ?? -0.36)) / 0.72)),
 		boundsBounce: Math.max(0, Math.min(1, props.bounds?.bounce ?? 0.42)),
-		staticTop: props.staticNodes?.top === true,
-		staticCenter: props.staticNodes?.center === true,
-		staticBottom: props.staticNodes?.bottom === true,
+		staticNodes: (props.staticNodes ?? []).slice(0, 3),
+		cameraProjection: props.camera?.projection === "perspective" ? 1 : 0,
+		cameraDistance: Math.max(1, Math.min(8, props.camera?.distance ?? 4.45)),
+		cameraScale: Math.max(0.2, Math.min(3, props.camera?.scale ?? 1.42)),
+		cameraFocalLength: Math.max(0.2, Math.min(5, props.camera?.focalLength ?? 2.05)),
 	};
 }
 
@@ -147,19 +149,6 @@ function createSatelliteBlobs(): SatelliteBlob[] {
 		{ from: 6, to: 10, phase: 2.6, offset: 0.75 },
 		{ from: 8, to: 11, phase: 4.1, offset: -0.65 },
 	];
-}
-
-function staticNodeY(index: number, controls: ReturnType<typeof normalizeLavaControls>): number | null {
-	if (controls.staticBottom && index === 0) {
-		return clampRange(-0.62, controls.boundsY);
-	}
-	if (controls.staticCenter && index === Math.floor((controls.blobCount - 1) / 2)) {
-		return clampRange(0, controls.boundsY);
-	}
-	if (controls.staticTop && index === controls.blobCount - 1) {
-		return clampRange(0.62, controls.boundsY);
-	}
-	return null;
 }
 
 function updateElasticConnections(
@@ -241,20 +230,6 @@ function updateBlobStates(
 			continue;
 		}
 
-		const anchorY = staticNodeY(index, controls);
-		if (anchorY !== null) {
-			blob.x = 0;
-			blob.y = anchorY;
-			blob.z = 0;
-			blob.vx = 0;
-			blob.vy = 0;
-			blob.targetX = 0;
-			blob.targetY = anchorY;
-			blob.offsetX = 0;
-			blob.offsetY = 0;
-			continue;
-		}
-
 		const phase = blob.phase + time * 0.18 * controls.speed;
 		const drift = (0.28 + blob.radiusSeed * 0.24) * (0.72 + distribution * 0.62);
 		const baseY =
@@ -309,7 +284,7 @@ function pushBlobPulse(
 	const originY = (mouse.y - 0.5) * 2;
 
 	for (const [index, blob] of blobs.entries()) {
-		if (index >= controls.blobCount || staticNodeY(index, controls) !== null) {
+		if (index >= controls.blobCount) {
 			continue;
 		}
 
@@ -337,6 +312,7 @@ export function BrandLavaField({
 	connections,
 	bounds,
 	staticNodes,
+	camera,
 	blobCount,
 	blobSize,
 	blobSizeRange,
@@ -366,6 +342,7 @@ export function BrandLavaField({
 			connections,
 			bounds,
 			staticNodes,
+			camera,
 		}),
 	);
 	const cursorLightRef = useRef({
@@ -390,6 +367,7 @@ export function BrandLavaField({
 		connections,
 		bounds,
 		staticNodes,
+		camera,
 	});
 	cursorLightRef.current = {
 		radius: Math.max(0.01, Math.min(1, cursorLight?.radius ?? 0.34)),
@@ -432,7 +410,9 @@ export function BrandLavaField({
 		let cursorLightColorLocation: WebGLUniformLocation | null = null;
 		let lavaShapeLocation: WebGLUniformLocation | null = null;
 		let lavaMotionLocation: WebGLUniformLocation | null = null;
+		let cameraLocation: WebGLUniformLocation | null = null;
 		let blobSphereLocations: (WebGLUniformLocation | null)[] = [];
+		let staticSphereLocations: (WebGLUniformLocation | null)[] = [];
 		let connectionStartLocations: (WebGLUniformLocation | null)[] = [];
 		let connectionEndLocations: (WebGLUniformLocation | null)[] = [];
 
@@ -460,9 +440,11 @@ export function BrandLavaField({
 			cursorLightColorLocation = gl.getUniformLocation(program, "uCursorLightColor");
 			lavaShapeLocation = gl.getUniformLocation(program, "uLavaShape");
 			lavaMotionLocation = gl.getUniformLocation(program, "uLavaMotion");
+			cameraLocation = gl.getUniformLocation(program, "uCamera");
 			blobSphereLocations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) =>
 				gl.getUniformLocation(program, `uBlobSpheres[${index}]`),
 			);
+			staticSphereLocations = [0, 1, 2].map((index) => gl.getUniformLocation(program, `uStaticSpheres[${index}]`));
 			connectionStartLocations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) =>
 				gl.getUniformLocation(program, `uConnectionStart[${index}]`),
 			);
@@ -483,7 +465,9 @@ export function BrandLavaField({
 				cursorLightColorLocation === null ||
 				lavaShapeLocation === null ||
 				lavaMotionLocation === null ||
+				cameraLocation === null ||
 				blobSphereLocations.some((location) => location === null) ||
+				staticSphereLocations.some((location) => location === null) ||
 				connectionStartLocations.some((location) => location === null) ||
 				connectionEndLocations.some((location) => location === null) ||
 				highlightLocations.some((location) => location === null) ||
@@ -567,7 +551,8 @@ export function BrandLavaField({
 				!cursorLightLocation ||
 				!cursorLightColorLocation ||
 				!lavaShapeLocation ||
-				!lavaMotionLocation
+				!lavaMotionLocation ||
+				!cameraLocation
 			) {
 				return;
 			}
@@ -596,6 +581,13 @@ export function BrandLavaField({
 				lavaControls.mergeSmoothness,
 			);
 			gl.uniform4f(lavaMotionLocation, lavaControls.speed, 0, lavaControls.gravity, lavaControls.attraction);
+			gl.uniform4f(
+				cameraLocation,
+				lavaControls.cameraProjection,
+				lavaControls.cameraDistance,
+				lavaControls.cameraScale,
+				lavaControls.cameraFocalLength,
+			);
 			for (const [index, location] of blobSphereLocations.entries()) {
 				if (!location) {
 					continue;
@@ -637,6 +629,13 @@ export function BrandLavaField({
 				}
 				const radius = primaryActive ? blobRadius(index, blob.radiusSeed, lavaControls, time) : 0;
 				gl.uniform4f(location, blob.x, blob.y, blob.z, radius);
+			}
+			for (const [index, location] of staticSphereLocations.entries()) {
+				if (!location) {
+					continue;
+				}
+				const node = lavaControls.staticNodes[index];
+				gl.uniform4f(location, node?.x ?? 0, node?.y ?? 0, node?.z ?? 0, node?.radius ?? 0);
 			}
 			for (const [index, location] of connectionStartLocations.entries()) {
 				const endLocation = connectionEndLocations[index];
