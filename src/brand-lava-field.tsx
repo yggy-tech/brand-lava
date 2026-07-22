@@ -181,7 +181,8 @@ const fragmentSource = `
 	uniform vec4 uLavaShape;
 	uniform vec4 uLavaMotion;
 	uniform vec4 uBlobSpheres[12];
-	uniform vec4 uBlobLinks[8];
+	uniform vec4 uBlobCapsuleA[8];
+	uniform vec4 uBlobCapsuleB[8];
 
 	float smin(float a, float b, float k) {
 		float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
@@ -220,14 +221,10 @@ const fragmentSource = `
 		}
 
 		for (int i = 0; i < 8; i++) {
-			vec4 link = uBlobLinks[i];
-			int from = int(link.x);
-			int to = int(link.y);
-			if (link.w > 0.0) {
-				vec4 a = uBlobSpheres[from];
-				vec4 b = uBlobSpheres[to];
-				float radius = min(a.w, b.w) * link.z;
-				d = smin(d, sdCapsule(p, a.xyz, b.xyz, radius), radius * 0.55);
+			vec4 a = uBlobCapsuleA[i];
+			vec4 b = uBlobCapsuleB[i];
+			if (b.w > 0.0) {
+				d = smin(d, sdCapsule(p, a.xyz, b.xyz, a.w), a.w * 0.55);
 			}
 		}
 
@@ -536,7 +533,8 @@ export function BrandLavaField({
 		let lavaShapeLocation: WebGLUniformLocation | null = null;
 		let lavaMotionLocation: WebGLUniformLocation | null = null;
 		let blobSphereLocations: (WebGLUniformLocation | null)[] = [];
-		let blobLinkLocations: (WebGLUniformLocation | null)[] = [];
+		let blobCapsuleALocations: (WebGLUniformLocation | null)[] = [];
+		let blobCapsuleBLocations: (WebGLUniformLocation | null)[] = [];
 
 		try {
 			program = createProgram(gl, vertexSource, fragmentSource);
@@ -565,8 +563,11 @@ export function BrandLavaField({
 			blobSphereLocations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) =>
 				gl.getUniformLocation(program, `uBlobSpheres[${index}]`),
 			);
-			blobLinkLocations = [0, 1, 2, 3, 4, 5, 6, 7].map((index) =>
-				gl.getUniformLocation(program, `uBlobLinks[${index}]`),
+			blobCapsuleALocations = [0, 1, 2, 3, 4, 5, 6, 7].map((index) =>
+				gl.getUniformLocation(program, `uBlobCapsuleA[${index}]`),
+			);
+			blobCapsuleBLocations = [0, 1, 2, 3, 4, 5, 6, 7].map((index) =>
+				gl.getUniformLocation(program, `uBlobCapsuleB[${index}]`),
 			);
 
 			if (
@@ -583,7 +584,8 @@ export function BrandLavaField({
 				lavaShapeLocation === null ||
 				lavaMotionLocation === null ||
 				blobSphereLocations.some((location) => location === null) ||
-				blobLinkLocations.some((location) => location === null) ||
+				blobCapsuleALocations.some((location) => location === null) ||
+				blobCapsuleBLocations.some((location) => location === null) ||
 				highlightLocations.some((location) => location === null) ||
 				highlightColorLocations.some((location) => location === null) ||
 				positionLocation < 0
@@ -695,13 +697,26 @@ export function BrandLavaField({
 					: 0;
 				gl.uniform4f(location, blob.x, blob.y, blob.z, radius);
 			}
-			for (const [index, location] of blobLinkLocations.entries()) {
-				if (!location) {
+			for (const [index, location] of blobCapsuleALocations.entries()) {
+				const endLocation = blobCapsuleBLocations[index];
+				if (!location || !endLocation) {
 					continue;
 				}
 				const link = links[index];
 				const enabled = link.from < lavaControls.blobCount && link.to < lavaControls.blobCount ? link.enabled : 0;
-				gl.uniform4f(location, link.from, link.to, link.radiusScale, enabled);
+				const from = blobs[link.from];
+				const to = blobs[link.to];
+				const fromRadius =
+					((link.from === 0 ? 0.34 : link.from === 11 ? 0.29 : 0.19 + 0.08 * from.radiusSeed) +
+						0.035 * Math.sin(time * 0.00036 * lavaControls.speed + link.from)) *
+					lavaControls.blobSize;
+				const toRadius =
+					((link.to === 0 ? 0.34 : link.to === 11 ? 0.29 : 0.19 + 0.08 * to.radiusSeed) +
+						0.035 * Math.sin(time * 0.00036 * lavaControls.speed + link.to)) *
+					lavaControls.blobSize;
+				const radius = Math.min(fromRadius, toRadius) * link.radiusScale * enabled;
+				gl.uniform4f(location, from.x, from.y, from.z, radius);
+				gl.uniform4f(endLocation, to.x, to.y, to.z, enabled);
 			}
 			gl.uniform4f(
 				cursorLightLocation,
