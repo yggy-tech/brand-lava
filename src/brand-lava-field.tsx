@@ -40,12 +40,6 @@ export type BrandLavaFieldProps = {
 		wobble?: number;
 		blend?: number;
 	};
-	depthOfField?: {
-		enabled?: boolean;
-		focus?: number;
-		range?: number;
-		strength?: number;
-	};
 	bounds?: {
 		x?: readonly [number, number];
 		y?: readonly [number, number];
@@ -234,7 +228,6 @@ const fragmentSource = `
 	uniform vec4 uBlobSpheres[12];
 	uniform vec4 uConnectionStart[12];
 	uniform vec4 uConnectionEnd[12];
-	uniform vec4 uDepthOfField;
 
 	float smin(float a, float b, float k) {
 		float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
@@ -349,28 +342,6 @@ const fragmentSource = `
 		float travel = 0.0;
 		float hit = 0.0;
 		vec3 color = shadeRay(uv, uTime, travel, hit);
-		float cursorBlobGate = hit * smoothstep(uCursorLight.z, 0.0, length(screenUv - uMouse));
-		float blurAmount =
-			smoothstep(0.0, uDepthOfField.y, abs(travel - uDepthOfField.x)) * uDepthOfField.z * uDepthOfField.w * cursorBlobGate;
-		if (blurAmount > 0.01) {
-			vec2 px = vec2(1.0 / uResolution.x, 1.0 / uResolution.y);
-			float radius = blurAmount * 7.5;
-			float t1 = 0.0;
-			float h1 = 0.0;
-			float t2 = 0.0;
-			float h2 = 0.0;
-			float t3 = 0.0;
-			float h3 = 0.0;
-			float t4 = 0.0;
-			float h4 = 0.0;
-			vec2 uvStep = px * radius * vec2(uResolution.x / uResolution.y, 1.0);
-			vec3 blur =
-				shadeRay(uv + vec2(uvStep.x, 0.0), uTime, t1, h1) +
-				shadeRay(uv - vec2(uvStep.x, 0.0), uTime, t2, h2) +
-				shadeRay(uv + vec2(0.0, uvStep.y), uTime, t3, h3) +
-				shadeRay(uv - vec2(0.0, uvStep.y), uTime, t4, h4);
-			color = mix(color, blur * 0.25, blurAmount);
-		}
 
 		for (int i = 0; i < 4; i++) {
 			vec4 highlight = uHighlights[i];
@@ -440,10 +411,6 @@ function normalizeLavaControls(props: BrandLavaFieldProps) {
 		connectionDamping: Math.max(0.7, Math.min(0.99, props.connections?.damping ?? 0.91)),
 		connectionWobble: Math.max(0, Math.min(1, props.connections?.wobble ?? 0.28)),
 		connectionBlend: Math.max(0.002, Math.min(0.12, props.connections?.blend ?? 0.018)),
-		dofEnabled: props.depthOfField?.enabled === true ? 1 : 0,
-		dofFocus: Math.max(0.5, Math.min(7, props.depthOfField?.focus ?? 4.2)),
-		dofRange: Math.max(0.05, Math.min(3, props.depthOfField?.range ?? 1.1)),
-		dofStrength: Math.max(0, Math.min(1, props.depthOfField?.strength ?? 0.34)),
 		boundsX: props.bounds?.x ?? ([-0.82, 0.82] as const),
 		boundsY: props.bounds?.y ?? ([-1.58, 1.86] as const),
 		boundsZ: props.bounds?.z ?? ([-0.36, 0.36] as const),
@@ -684,7 +651,6 @@ export function BrandLavaField({
 	fieldInteraction,
 	satellites,
 	connections,
-	depthOfField,
 	bounds,
 	blobCount,
 	blobSize,
@@ -713,7 +679,6 @@ export function BrandLavaField({
 			fieldInteraction,
 			satellites,
 			connections,
-			depthOfField,
 			bounds,
 		}),
 	);
@@ -737,7 +702,6 @@ export function BrandLavaField({
 		fieldInteraction,
 		satellites,
 		connections,
-		depthOfField,
 		bounds,
 	});
 	cursorLightRef.current = {
@@ -784,7 +748,6 @@ export function BrandLavaField({
 		let blobSphereLocations: (WebGLUniformLocation | null)[] = [];
 		let connectionStartLocations: (WebGLUniformLocation | null)[] = [];
 		let connectionEndLocations: (WebGLUniformLocation | null)[] = [];
-		let depthOfFieldLocation: WebGLUniformLocation | null = null;
 
 		try {
 			program = createProgram(gl, vertexSource, fragmentSource);
@@ -819,7 +782,6 @@ export function BrandLavaField({
 			connectionEndLocations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) =>
 				gl.getUniformLocation(program, `uConnectionEnd[${index}]`),
 			);
-			depthOfFieldLocation = gl.getUniformLocation(program, "uDepthOfField");
 
 			if (
 				resolutionLocation === null ||
@@ -834,7 +796,6 @@ export function BrandLavaField({
 				cursorLightColorLocation === null ||
 				lavaShapeLocation === null ||
 				lavaMotionLocation === null ||
-				depthOfFieldLocation === null ||
 				blobSphereLocations.some((location) => location === null) ||
 				connectionStartLocations.some((location) => location === null) ||
 				connectionEndLocations.some((location) => location === null) ||
@@ -911,8 +872,7 @@ export function BrandLavaField({
 				!cursorLightLocation ||
 				!cursorLightColorLocation ||
 				!lavaShapeLocation ||
-				!lavaMotionLocation ||
-				!depthOfFieldLocation
+				!lavaMotionLocation
 			) {
 				return;
 			}
@@ -939,13 +899,6 @@ export function BrandLavaField({
 				lavaControls.mergeSmoothness,
 			);
 			gl.uniform4f(lavaMotionLocation, lavaControls.speed, 0, lavaControls.gravity, lavaControls.attraction);
-			gl.uniform4f(
-				depthOfFieldLocation,
-				lavaControls.dofFocus,
-				lavaControls.dofRange,
-				lavaControls.dofStrength,
-				lavaControls.dofEnabled,
-			);
 			for (const [index, location] of blobSphereLocations.entries()) {
 				if (!location) {
 					continue;
