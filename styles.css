@@ -2,14 +2,14 @@
 	--brand-lava-1: #d8f36a;
 	--brand-lava-2: #79b83f;
 	--brand-lava-3: #2f6f2f;
-	--brand-lava-highlight: #efffa3;
-	--brand-lava-cursor-light: #d8f36a;
+	--brand-lava-highlight: #004225;
+	--brand-lava-cursor-light: #0b6b3a;
 }
 
 .dark {
 	--brand-lava-1: #e8ff7a;
 	--brand-lava-2: #9bd64a;
 	--brand-lava-3: #3f7f35;
-	--brand-lava-highlight: #f2ffad;
-	--brand-lava-cursor-light: #e8ff7a;
+	--brand-lava-highlight: #005a32;
+	--brand-lava-cursor-light: #0b7f43;
 }

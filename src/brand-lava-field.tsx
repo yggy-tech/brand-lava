@@ -25,6 +25,10 @@ export type BrandLavaFieldProps = {
 	gravity?: number;
 	attraction?: number;
 	mergeSmoothness?: number;
+	clickPulse?: {
+		strength?: number;
+		decay?: number;
+	};
 };
 
 type ThemeColors = {
@@ -187,6 +191,7 @@ const fragmentSource = `
 		float drift = (0.28 + hash(index) * 0.24) * mix(0.72, 1.34, distribution);
 		float level = -1.05 + index * mix(0.24, 0.33, distribution);
 		level -= uLavaMotion.z * (0.1 + hash(index + 4.0) * 0.24);
+		level += uLavaMotion.y * (0.2 + hash(index + 7.0) * 0.34);
 		return vec3(
 			cos(phase + 0.7 * sin(t * 0.38 + index * 1.1)) * drift,
 			level + sin(phase * 0.9 + t * 0.42) * mix(0.08, 0.16, distribution),
@@ -273,7 +278,8 @@ const fragmentSource = `
 		for (int i = 0; i < 4; i++) {
 			vec4 highlight = uHighlights[i];
 			float area = smoothstep(highlight.z, 0.0, length(screenUv - highlight.xy)) * highlight.w;
-			color = mix(color, uHighlightColors[i], area);
+			color = mix(color, uHighlightColors[i], area * 0.82);
+			color += uHighlightColors[i] * area * 0.08;
 		}
 
 		float vignette = smoothstep(1.35, 0.12, length(uv) * 1.05);
@@ -318,6 +324,8 @@ function normalizeLavaControls(props: BrandLavaFieldProps) {
 		gravity: Math.max(-1, Math.min(1, props.gravity ?? 0)),
 		attraction: Math.max(0, Math.min(0.7, props.attraction ?? 0.18)),
 		mergeSmoothness: Math.max(0.05, Math.min(0.6, props.mergeSmoothness ?? 0.25)),
+		clickPulseStrength: Math.max(0, Math.min(2, props.clickPulse?.strength ?? 0.9)),
+		clickPulseDecay: Math.max(0.72, Math.min(0.98, props.clickPulse?.decay ?? 0.88)),
 	};
 }
 
@@ -331,12 +339,22 @@ export function BrandLavaField({
 	gravity,
 	attraction,
 	mergeSmoothness,
+	clickPulse,
 }: BrandLavaFieldProps) {
 	const rootRef = useRef<HTMLDivElement | null>(null);
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
 	const highlightsRef = useRef(normalizeHighlights(highlights));
 	const lavaControlsRef = useRef(
-		normalizeLavaControls({ blobCount, blobSize, distribution, speed, gravity, attraction, mergeSmoothness }),
+		normalizeLavaControls({
+			blobCount,
+			blobSize,
+			distribution,
+			speed,
+			gravity,
+			attraction,
+			mergeSmoothness,
+			clickPulse,
+		}),
 	);
 	const cursorLightRef = useRef({
 		radius: Math.max(0.01, Math.min(1, cursorLight?.radius ?? 0.34)),
@@ -353,6 +371,7 @@ export function BrandLavaField({
 		gravity,
 		attraction,
 		mergeSmoothness,
+		clickPulse,
 	});
 	cursorLightRef.current = {
 		radius: Math.max(0.01, Math.min(1, cursorLight?.radius ?? 0.34)),
@@ -459,10 +478,14 @@ export function BrandLavaField({
 
 		const mouse = { x: 0.5, y: 0.5 };
 		const targetMouse = { x: 0.5, y: 0.5 };
+		let pulse = 0;
 		const onMove = (event: PointerEvent) => {
 			const rect = root.getBoundingClientRect();
 			targetMouse.x = (event.clientX - rect.left) / rect.width;
 			targetMouse.y = 1 - (event.clientY - rect.top) / rect.height;
+		};
+		const onDown = () => {
+			pulse = Math.max(pulse, lavaControlsRef.current.clickPulseStrength);
 		};
 		const onLeave = () => {
 			targetMouse.x = 0.5;
@@ -514,6 +537,7 @@ export function BrandLavaField({
 			gl.uniform3f(lavaBLocation, themeColors.lavaB[0], themeColors.lavaB[1], themeColors.lavaB[2]);
 			gl.uniform3f(lavaCLocation, themeColors.lavaC[0], themeColors.lavaC[1], themeColors.lavaC[2]);
 			const lavaControls = lavaControlsRef.current;
+			pulse *= lavaControls.clickPulseDecay;
 			gl.uniform4f(
 				lavaShapeLocation,
 				lavaControls.blobCount,
@@ -521,7 +545,7 @@ export function BrandLavaField({
 				lavaControls.distribution,
 				lavaControls.mergeSmoothness,
 			);
-			gl.uniform4f(lavaMotionLocation, lavaControls.speed, 0, lavaControls.gravity, lavaControls.attraction);
+			gl.uniform4f(lavaMotionLocation, lavaControls.speed, pulse, lavaControls.gravity, lavaControls.attraction);
 			gl.uniform4f(
 				cursorLightLocation,
 				mouse.x,
@@ -551,6 +575,7 @@ export function BrandLavaField({
 		};
 
 		root.addEventListener("pointermove", onMove);
+		root.addEventListener("pointerdown", onDown);
 		root.addEventListener("pointerleave", onLeave);
 		window.addEventListener("resize", resize);
 		resize();
@@ -560,6 +585,7 @@ export function BrandLavaField({
 			cancelAnimationFrame(animationFrame);
 			observer.disconnect();
 			root.removeEventListener("pointermove", onMove);
+			root.removeEventListener("pointerdown", onDown);
 			root.removeEventListener("pointerleave", onLeave);
 			window.removeEventListener("resize", resize);
 			if (positionBuffer) {
