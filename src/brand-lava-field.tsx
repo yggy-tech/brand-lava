@@ -354,7 +354,7 @@ const fragmentSource = `
 			smoothstep(0.0, uDepthOfField.y, abs(travel - uDepthOfField.x)) * uDepthOfField.z * uDepthOfField.w * cursorBlobGate;
 		if (blurAmount > 0.01) {
 			vec2 px = vec2(1.0 / uResolution.x, 1.0 / uResolution.y);
-			float radius = blurAmount * 7.5;
+			float radius = blurAmount * 18.0;
 			float t1 = 0.0;
 			float h1 = 0.0;
 			float t2 = 0.0;
@@ -448,7 +448,7 @@ function normalizeLavaControls(props: BrandLavaFieldProps) {
 		dofEnabled: props.depthOfField?.enabled === true ? 1 : 0,
 		dofFocus: Math.max(0.5, Math.min(7, props.depthOfField?.focus ?? 4.2)),
 		dofRange: Math.max(0.05, Math.min(3, props.depthOfField?.range ?? 1.1)),
-		dofStrength: Math.max(0, Math.min(1.8, props.depthOfField?.strength ?? 0.72)),
+		dofStrength: Math.max(0, Math.min(4, props.depthOfField?.strength ?? 0.72)),
 	};
 }
 
