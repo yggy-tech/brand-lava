@@ -18,6 +18,18 @@ export type BrandLavaFieldProps = {
 		intensity?: number;
 		color?: string;
 	};
+	fieldInteraction?: {
+		enabled?: boolean;
+		attraction?: number;
+		repulsion?: number;
+		range?: number;
+	};
+	satellites?: {
+		enabled?: boolean;
+		count?: number;
+		size?: number;
+		drift?: number;
+	};
 	connections?: {
 		mode?: "none" | "elastic";
 		count?: number;
@@ -83,6 +95,13 @@ type ElasticConnection = {
 	to: number;
 	bend: number;
 	points: ElasticPoint[];
+};
+
+type SatelliteBlob = {
+	from: number;
+	to: number;
+	phase: number;
+	offset: number;
 };
 
 function cssColorToRgb(value: string, fallback: Rgb): Rgb {
@@ -369,6 +388,14 @@ function normalizeLavaControls(props: BrandLavaFieldProps) {
 		mergeSmoothness: Math.max(0.05, Math.min(1.1, props.mergeSmoothness ?? 0.42)),
 		clickPulseStrength: Math.max(0, Math.min(2, props.clickPulse?.strength ?? 0.9)),
 		clickPulseDecay: Math.max(0.72, Math.min(0.98, props.clickPulse?.decay ?? 0.93)),
+		fieldInteractionEnabled: props.fieldInteraction?.enabled === true,
+		fieldAttraction: Math.max(0, Math.min(1, props.fieldInteraction?.attraction ?? 0.12)),
+		fieldRepulsion: Math.max(0, Math.min(1, props.fieldInteraction?.repulsion ?? 0.18)),
+		fieldRange: Math.max(0.2, Math.min(2.4, props.fieldInteraction?.range ?? 1.05)),
+		satellitesEnabled: props.satellites?.enabled === true,
+		satelliteCount: Math.max(0, Math.min(4, Math.round(props.satellites?.count ?? 3))),
+		satelliteSize: Math.max(0.08, Math.min(0.65, props.satellites?.size ?? 0.32)),
+		satelliteDrift: Math.max(0, Math.min(1, props.satellites?.drift ?? 0.32)),
 		connectionMode: props.connections?.mode ?? "none",
 		connectionCount: Math.max(0, Math.min(3, Math.round(props.connections?.count ?? 3))),
 		connectionSegments: Math.max(2, Math.min(4, Math.round(props.connections?.segments ?? 4))),
@@ -409,6 +436,15 @@ function createElasticConnections(): ElasticConnection[] {
 		...connection,
 		points: Array.from({ length: 5 }, () => ({ x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 })),
 	}));
+}
+
+function createSatelliteBlobs(): SatelliteBlob[] {
+	return [
+		{ from: 1, to: 4, phase: 0.3, offset: 1 },
+		{ from: 3, to: 7, phase: 1.7, offset: -1 },
+		{ from: 6, to: 10, phase: 2.6, offset: 0.75 },
+		{ from: 8, to: 11, phase: 4.1, offset: -0.65 },
+	];
 }
 
 function updateElasticConnections(
@@ -510,6 +546,23 @@ function updateBlobStates(
 
 		blob.vx += (blob.targetX - blob.x) * spring + towardPointerX * pointerPull;
 		blob.vy += (blob.targetY - blob.y) * spring + towardPointerY * pointerPull - controls.gravity * 0.00045;
+		if (controls.fieldInteractionEnabled) {
+			for (const [otherIndex, other] of blobs.entries()) {
+				if (otherIndex === index || otherIndex >= activeCount) {
+					continue;
+				}
+
+				const dx = other.x - blob.x;
+				const dy = other.y - blob.y;
+				const distance = Math.max(0.001, Math.hypot(dx, dy));
+				const withinRange = Math.max(0, 1 - distance / controls.fieldRange);
+				const repel = Math.max(0, 1 - distance / 0.34) * controls.fieldRepulsion * 0.0028;
+				const attract = withinRange * withinRange * controls.fieldAttraction * 0.00075;
+				const force = attract - repel;
+				blob.vx += (dx / distance) * force;
+				blob.vy += (dy / distance) * force;
+			}
+		}
 		blob.vx *= damping;
 		blob.vy *= damping;
 		blob.x += blob.vx;
@@ -547,6 +600,8 @@ function pushBlobPulse(
 export function BrandLavaField({
 	highlights,
 	cursorLight,
+	fieldInteraction,
+	satellites,
 	connections,
 	depthOfField,
 	blobCount,
@@ -571,6 +626,8 @@ export function BrandLavaField({
 			attraction,
 			mergeSmoothness,
 			clickPulse,
+			fieldInteraction,
+			satellites,
 			connections,
 			depthOfField,
 		}),
@@ -591,6 +648,8 @@ export function BrandLavaField({
 		attraction,
 		mergeSmoothness,
 		clickPulse,
+		fieldInteraction,
+		satellites,
 		connections,
 		depthOfField,
 	});
@@ -718,6 +777,7 @@ export function BrandLavaField({
 		const mouse = { x: 0.5, y: 0.5 };
 		const targetMouse = { x: 0.5, y: 0.5 };
 		const blobs = createBlobStates();
+		const satelliteBlobs = createSatelliteBlobs();
 		const elasticConnections = createElasticConnections();
 		const onMove = (event: PointerEvent) => {
 			const rect = root.getBoundingClientRect();
@@ -804,8 +864,35 @@ export function BrandLavaField({
 					continue;
 				}
 				const blob = blobs[index];
-				const active = index < lavaControls.blobCount;
-				const radius = active
+				const primaryActive = index < lavaControls.blobCount;
+				const satelliteIndex = index - lavaControls.blobCount;
+				const satellite = satelliteBlobs[satelliteIndex];
+				if (
+					lavaControls.satellitesEnabled &&
+					satellite &&
+					satelliteIndex < lavaControls.satelliteCount &&
+					satellite.from < lavaControls.blobCount &&
+					satellite.to < lavaControls.blobCount &&
+					index < 12
+				) {
+					const from = blobs[satellite.from];
+					const to = blobs[satellite.to];
+					const dx = to.x - from.x;
+					const dy = to.y - from.y;
+					const distance = Math.max(0.001, Math.hypot(dx, dy));
+					const normalX = -dy / distance;
+					const normalY = dx / distance;
+					const drift =
+						Math.sin(time * 0.00042 * lavaControls.speed + satellite.phase) * lavaControls.satelliteDrift * 0.16;
+					const t = 0.5 + Math.sin(time * 0.00023 * lavaControls.speed + satellite.phase) * 0.12;
+					const x = from.x + dx * t + normalX * drift * satellite.offset;
+					const y = from.y + dy * t + normalY * drift * satellite.offset;
+					const z = (from.z + to.z) * 0.5 + Math.cos(time * 0.00031 * lavaControls.speed + satellite.phase) * 0.08;
+					const baseRadius = Math.min(0.19 + 0.08 * from.radiusSeed, 0.19 + 0.08 * to.radiusSeed);
+					gl.uniform4f(location, x, y, z, baseRadius * lavaControls.satelliteSize * lavaControls.blobSize);
+					continue;
+				}
+				const radius = primaryActive
 					? ((index === 0 ? 0.34 : index === 11 ? 0.29 : 0.19 + 0.08 * blob.radiusSeed) +
 							0.035 * Math.sin(time * 0.00036 * lavaControls.speed + index)) *
 						lavaControls.blobSize
