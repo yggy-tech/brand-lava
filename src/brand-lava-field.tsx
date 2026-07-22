@@ -207,6 +207,26 @@ const fragmentSource = `
 		return d;
 	}
 
+	float nearConnection(vec3 p) {
+		float nearest = 8.0;
+		float secondNearest = 8.0;
+
+		for (int i = 0; i < 12; i++) {
+			vec4 sphere = uBlobSpheres[i];
+			float d = sdSphere(p, sphere.xyz, sphere.w);
+			if (d < nearest) {
+				secondNearest = nearest;
+				nearest = d;
+			} else if (d < secondNearest) {
+				secondNearest = d;
+			}
+		}
+
+		float bridge = smoothstep(uLavaShape.w * 1.7, 0.0, nearest + secondNearest);
+		float outsideSurface = smoothstep(0.0, uLavaShape.w * 0.8, nearest);
+		return bridge * outsideSurface;
+	}
+
 	vec3 normalAt(vec3 p, float t) {
 		vec2 e = vec2(0.004, 0.0);
 		return normalize(vec3(
@@ -248,8 +268,8 @@ const fragmentSource = `
 		vec2 screenUv = gl_FragCoord.xy / uResolution.xy;
 		float cursorLight = smoothstep(uCursorLight.z, 0.0, length(screenUv - uMouse)) * uCursorLight.w;
 
+		vec3 p = ro + rd * travel;
 		if (hit > 0.5) {
-			vec3 p = ro + rd * travel;
 			vec3 n = normalAt(p, uTime * uLavaMotion.x);
 			float fresnel = pow(1.0 - max(dot(n, -rd), 0.0), 2.0);
 			float light = clamp(dot(n, normalize(vec3(-0.35, 0.7, 0.5))), 0.0, 1.0);
@@ -262,6 +282,9 @@ const fragmentSource = `
 			lava = mix(lava, uCursorLightColor, cursorLight * 0.18);
 			color = lava;
 		}
+
+		float graphBridge = nearConnection(p) * 0.24;
+		color = mix(color, uLavaA, graphBridge);
 
 		for (int i = 0; i < 4; i++) {
 			vec4 highlight = uHighlights[i];
@@ -311,7 +334,7 @@ function normalizeLavaControls(props: BrandLavaFieldProps) {
 		speed: Math.max(0, Math.min(3, props.speed ?? 0.72)),
 		gravity: Math.max(-1, Math.min(1, props.gravity ?? 0)),
 		attraction: Math.max(0, Math.min(0.7, props.attraction ?? 0.08)),
-		mergeSmoothness: Math.max(0.05, Math.min(0.6, props.mergeSmoothness ?? 0.25)),
+		mergeSmoothness: Math.max(0.05, Math.min(1.1, props.mergeSmoothness ?? 0.42)),
 		clickPulseStrength: Math.max(0, Math.min(2, props.clickPulse?.strength ?? 0.9)),
 		clickPulseDecay: Math.max(0.72, Math.min(0.98, props.clickPulse?.decay ?? 0.93)),
 	};
