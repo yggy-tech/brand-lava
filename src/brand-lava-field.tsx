@@ -47,6 +47,8 @@ type BlobState = {
 	vy: number;
 	targetX: number;
 	targetY: number;
+	offsetX: number;
+	offsetY: number;
 	phase: number;
 	radiusSeed: number;
 };
@@ -326,6 +328,8 @@ function createBlobStates(): BlobState[] {
 		vy: 0,
 		targetX: 0,
 		targetY: -1.05 + index * 0.29,
+		offsetX: 0,
+		offsetY: 0,
 		phase: index * 1.61803,
 		radiusSeed: Math.sin(index * 127.1) * 0.5 + 0.5,
 	}));
@@ -357,8 +361,9 @@ function updateBlobStates(
 		const phase = blob.phase + time * 0.18 * controls.speed;
 		const drift = (0.28 + blob.radiusSeed * 0.24) * (0.72 + distribution * 0.62);
 		const baseY = -1.05 + index * spacing - controls.gravity * (0.1 + blob.radiusSeed * 0.24);
-		blob.targetX = Math.cos(phase + 0.7 * Math.sin(time * 0.38 * controls.speed + index * 1.1)) * drift;
-		blob.targetY = baseY + Math.sin(phase * 0.9 + time * 0.42 * controls.speed) * (0.08 + distribution * 0.08);
+		blob.targetX = Math.cos(phase + 0.7 * Math.sin(time * 0.38 * controls.speed + index * 1.1)) * drift + blob.offsetX;
+		blob.targetY =
+			baseY + Math.sin(phase * 0.9 + time * 0.42 * controls.speed) * (0.08 + distribution * 0.08) + blob.offsetY;
 		blob.z = Math.cos(phase * 0.67 + time * 0.5 * controls.speed) * (0.18 + distribution * 0.16);
 
 		const towardPointerX = pointerX - blob.x;
@@ -393,8 +398,12 @@ function pushBlobPulse(
 		const distance = Math.max(0.001, Math.hypot(dx, dy));
 		const falloff = Math.max(0, 1 - distance / 1.35);
 		const impulse = controls.clickPulseStrength * falloff * falloff * 0.032;
-		blob.vx += (dx / distance) * impulse;
-		blob.vy += (dy / distance) * impulse;
+		const impulseX = (dx / distance) * impulse;
+		const impulseY = (dy / distance) * impulse;
+		blob.vx += impulseX;
+		blob.vy += impulseY;
+		blob.offsetX += impulseX * 4.4;
+		blob.offsetY += impulseY * 4.4;
 	}
 }
 
