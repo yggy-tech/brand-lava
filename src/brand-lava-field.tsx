@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { blurFragmentSource, compositeFragmentSource, fragmentSource, vertexSource } from "./shaders";
+import { fragmentSource, vertexSource } from "./shaders";
 import { cssColorToRgb, readThemeColors } from "./theme";
 import type {
 	BlobState,
@@ -9,7 +9,7 @@ import type {
 	ElasticConnection,
 	SatelliteBlob,
 } from "./types";
-import { activateProgram, createFramebuffer, createProgram, createRenderTexture } from "./webgl";
+import { activateProgram, createProgram } from "./webgl";
 
 function clampUnit(value: number): number {
 	return Math.max(0, Math.min(1, value));
@@ -70,11 +70,6 @@ function normalizeLavaControls(props: BrandLavaFieldProps) {
 		boundsZ: props.bounds?.z ?? ([-0.36, 0.36] as const),
 		zDepthScale: Math.max(0.2, Math.min(4, ((props.bounds?.z?.[1] ?? 0.36) - (props.bounds?.z?.[0] ?? -0.36)) / 0.72)),
 		boundsBounce: Math.max(0, Math.min(1, props.bounds?.bounce ?? 0.42)),
-		dofEnabled: props.depthOfField?.enabled === true ? 1 : 0,
-		dofDynamic: props.depthOfField?.dynamic === true ? 1 : 0,
-		dofFocus: Math.max(0.5, Math.min(7, props.depthOfField?.focus ?? 4.2)),
-		dofRange: Math.max(0.05, Math.min(3, props.depthOfField?.range ?? 1.1)),
-		dofStrength: Math.max(0, Math.min(4, props.depthOfField?.strength ?? 0.72)),
 	};
 }
 
@@ -311,7 +306,6 @@ export function BrandLavaField({
 	satellites,
 	connections,
 	bounds,
-	depthOfField,
 	blobCount,
 	blobSize,
 	blobSizeRange,
@@ -340,7 +334,6 @@ export function BrandLavaField({
 			satellites,
 			connections,
 			bounds,
-			depthOfField,
 		}),
 	);
 	const cursorLightRef = useRef({
@@ -364,7 +357,6 @@ export function BrandLavaField({
 		satellites,
 		connections,
 		bounds,
-		depthOfField,
 	});
 	cursorLightRef.current = {
 		radius: Math.max(0.01, Math.min(1, cursorLight?.radius ?? 0.34)),
@@ -391,12 +383,8 @@ export function BrandLavaField({
 
 		let animationFrame = 0;
 		let program: WebGLProgram | null = null;
-		let blurProgram: WebGLProgram | null = null;
-		let compositeProgram: WebGLProgram | null = null;
 		let positionBuffer: WebGLBuffer | null = null;
 		let positionLocation = -1;
-		let blurPositionLocation = -1;
-		let compositePositionLocation = -1;
 		let resolutionLocation: WebGLUniformLocation | null = null;
 		let timeLocation: WebGLUniformLocation | null = null;
 		let mouseLocation: WebGLUniformLocation | null = null;
@@ -414,36 +402,15 @@ export function BrandLavaField({
 		let blobSphereLocations: (WebGLUniformLocation | null)[] = [];
 		let connectionStartLocations: (WebGLUniformLocation | null)[] = [];
 		let connectionEndLocations: (WebGLUniformLocation | null)[] = [];
-		let depthOfFieldLocation: WebGLUniformLocation | null = null;
-		let blurTextureLocation: WebGLUniformLocation | null = null;
-		let blurResolutionLocation: WebGLUniformLocation | null = null;
-		let blurDirectionLocation: WebGLUniformLocation | null = null;
-		let blurStrengthLocation: WebGLUniformLocation | null = null;
-		let compositeSharpTextureLocation: WebGLUniformLocation | null = null;
-		let compositeBlurTextureLocation: WebGLUniformLocation | null = null;
-		let compositeResolutionLocation: WebGLUniformLocation | null = null;
-		let compositeMouseLocation: WebGLUniformLocation | null = null;
-		let compositeDepthOfFieldLocation: WebGLUniformLocation | null = null;
-		let compositeStrengthLocation: WebGLUniformLocation | null = null;
-		let sceneTexture: WebGLTexture | null = null;
-		let blurTextureA: WebGLTexture | null = null;
-		let blurTextureB: WebGLTexture | null = null;
-		let sceneFramebuffer: WebGLFramebuffer | null = null;
-		let blurFramebufferA: WebGLFramebuffer | null = null;
-		let blurFramebufferB: WebGLFramebuffer | null = null;
 
 		try {
 			program = createProgram(gl, vertexSource, fragmentSource);
-			blurProgram = createProgram(gl, vertexSource, blurFragmentSource);
-			compositeProgram = createProgram(gl, vertexSource, compositeFragmentSource);
 			positionBuffer = gl.createBuffer();
 			if (!positionBuffer) {
 				throw new Error("Unable to allocate position buffer");
 			}
 
 			positionLocation = gl.getAttribLocation(program, "aPosition");
-			blurPositionLocation = gl.getAttribLocation(blurProgram, "aPosition");
-			compositePositionLocation = gl.getAttribLocation(compositeProgram, "aPosition");
 			resolutionLocation = gl.getUniformLocation(program, "uResolution");
 			timeLocation = gl.getUniformLocation(program, "uTime");
 			mouseLocation = gl.getUniformLocation(program, "uMouse");
@@ -469,17 +436,6 @@ export function BrandLavaField({
 			connectionEndLocations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) =>
 				gl.getUniformLocation(program, `uConnectionEnd[${index}]`),
 			);
-			depthOfFieldLocation = gl.getUniformLocation(program, "uDepthOfField");
-			blurTextureLocation = gl.getUniformLocation(blurProgram, "uTexture");
-			blurResolutionLocation = gl.getUniformLocation(blurProgram, "uResolution");
-			blurDirectionLocation = gl.getUniformLocation(blurProgram, "uDirection");
-			blurStrengthLocation = gl.getUniformLocation(blurProgram, "uStrength");
-			compositeSharpTextureLocation = gl.getUniformLocation(compositeProgram, "uSharpTexture");
-			compositeBlurTextureLocation = gl.getUniformLocation(compositeProgram, "uBlurTexture");
-			compositeResolutionLocation = gl.getUniformLocation(compositeProgram, "uResolution");
-			compositeMouseLocation = gl.getUniformLocation(compositeProgram, "uMouse");
-			compositeDepthOfFieldLocation = gl.getUniformLocation(compositeProgram, "uDepthOfField");
-			compositeStrengthLocation = gl.getUniformLocation(compositeProgram, "uStrength");
 
 			if (
 				resolutionLocation === null ||
@@ -494,25 +450,12 @@ export function BrandLavaField({
 				cursorLightColorLocation === null ||
 				lavaShapeLocation === null ||
 				lavaMotionLocation === null ||
-				depthOfFieldLocation === null ||
 				blobSphereLocations.some((location) => location === null) ||
 				connectionStartLocations.some((location) => location === null) ||
 				connectionEndLocations.some((location) => location === null) ||
 				highlightLocations.some((location) => location === null) ||
 				highlightColorLocations.some((location) => location === null) ||
-				blurTextureLocation === null ||
-				blurResolutionLocation === null ||
-				blurDirectionLocation === null ||
-				blurStrengthLocation === null ||
-				compositeSharpTextureLocation === null ||
-				compositeBlurTextureLocation === null ||
-				compositeResolutionLocation === null ||
-				compositeMouseLocation === null ||
-				compositeDepthOfFieldLocation === null ||
-				compositeStrengthLocation === null ||
-				positionLocation < 0 ||
-				blurPositionLocation < 0 ||
-				compositePositionLocation < 0
+				positionLocation < 0
 			) {
 				throw new Error("Unable to initialize WebGL uniform attributes");
 			}
@@ -526,12 +469,6 @@ export function BrandLavaField({
 		} catch {
 			if (program) {
 				gl.deleteProgram(program);
-			}
-			if (blurProgram) {
-				gl.deleteProgram(blurProgram);
-			}
-			if (compositeProgram) {
-				gl.deleteProgram(compositeProgram);
 			}
 			if (positionBuffer) {
 				gl.deleteBuffer(positionBuffer);
@@ -566,22 +503,6 @@ export function BrandLavaField({
 			const dpr = Math.max(1, Math.min(window.devicePixelRatio, 2));
 			canvas.width = Math.max(1, Math.floor(rect.width * dpr));
 			canvas.height = Math.max(1, Math.floor(rect.height * dpr));
-			for (const framebuffer of [sceneFramebuffer, blurFramebufferA, blurFramebufferB]) {
-				if (framebuffer) {
-					gl.deleteFramebuffer(framebuffer);
-				}
-			}
-			for (const texture of [sceneTexture, blurTextureA, blurTextureB]) {
-				if (texture) {
-					gl.deleteTexture(texture);
-				}
-			}
-			sceneTexture = createRenderTexture(gl, canvas.width, canvas.height);
-			blurTextureA = createRenderTexture(gl, canvas.width, canvas.height);
-			blurTextureB = createRenderTexture(gl, canvas.width, canvas.height);
-			sceneFramebuffer = sceneTexture ? createFramebuffer(gl, sceneTexture) : null;
-			blurFramebufferA = blurTextureA ? createFramebuffer(gl, blurTextureA) : null;
-			blurFramebufferB = blurTextureB ? createFramebuffer(gl, blurTextureB) : null;
 			gl.viewport(0, 0, canvas.width, canvas.height);
 		};
 
@@ -602,8 +523,6 @@ export function BrandLavaField({
 		const render = (time: number) => {
 			if (
 				!program ||
-				!blurProgram ||
-				!compositeProgram ||
 				!resolutionLocation ||
 				!timeLocation ||
 				!mouseLocation ||
@@ -615,23 +534,13 @@ export function BrandLavaField({
 				!cursorLightLocation ||
 				!cursorLightColorLocation ||
 				!lavaShapeLocation ||
-				!lavaMotionLocation ||
-				!depthOfFieldLocation
+				!lavaMotionLocation
 			) {
 				return;
 			}
 
 			const lavaControls = lavaControlsRef.current;
-			const usePostprocess = Boolean(
-				lavaControls.dofEnabled > 0 &&
-					sceneFramebuffer &&
-					blurFramebufferA &&
-					blurFramebufferB &&
-					sceneTexture &&
-					blurTextureA &&
-					blurTextureB,
-			);
-			gl.bindFramebuffer(gl.FRAMEBUFFER, usePostprocess ? sceneFramebuffer : null);
+			gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 			gl.viewport(0, 0, canvas.width, canvas.height);
 			activateProgram(gl, program);
 			mouse.x += (targetMouse.x - mouse.x) * 0.026;
@@ -654,13 +563,6 @@ export function BrandLavaField({
 				lavaControls.mergeSmoothness,
 			);
 			gl.uniform4f(lavaMotionLocation, lavaControls.speed, 0, lavaControls.gravity, lavaControls.attraction);
-			gl.uniform4f(
-				depthOfFieldLocation,
-				lavaControls.dofFocus,
-				lavaControls.dofRange,
-				lavaControls.dofStrength,
-				lavaControls.dofEnabled,
-			);
 			for (const [index, location] of blobSphereLocations.entries()) {
 				if (!location) {
 					continue;
@@ -749,57 +651,6 @@ export function BrandLavaField({
 			}
 			drawFullscreen(program, positionLocation);
 
-			if (
-				usePostprocess &&
-				sceneTexture &&
-				blurTextureA &&
-				blurTextureB &&
-				sceneFramebuffer &&
-				blurFramebufferA &&
-				blurFramebufferB
-			) {
-				gl.bindFramebuffer(gl.FRAMEBUFFER, blurFramebufferA);
-				gl.viewport(0, 0, canvas.width, canvas.height);
-				activateProgram(gl, blurProgram);
-				gl.activeTexture(gl.TEXTURE0);
-				gl.bindTexture(gl.TEXTURE_2D, sceneTexture);
-				gl.uniform1i(blurTextureLocation, 0);
-				gl.uniform2f(blurResolutionLocation, canvas.width, canvas.height);
-				gl.uniform2f(blurDirectionLocation, 1, 0);
-				gl.uniform1f(blurStrengthLocation, lavaControls.dofStrength);
-				drawFullscreen(blurProgram, blurPositionLocation);
-
-				gl.bindFramebuffer(gl.FRAMEBUFFER, blurFramebufferB);
-				gl.activeTexture(gl.TEXTURE0);
-				gl.bindTexture(gl.TEXTURE_2D, blurTextureA);
-				gl.uniform1i(blurTextureLocation, 0);
-				gl.uniform2f(blurResolutionLocation, canvas.width, canvas.height);
-				gl.uniform2f(blurDirectionLocation, 0, 1);
-				gl.uniform1f(blurStrengthLocation, lavaControls.dofStrength);
-				drawFullscreen(blurProgram, blurPositionLocation);
-
-				gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-				gl.viewport(0, 0, canvas.width, canvas.height);
-				activateProgram(gl, compositeProgram);
-				gl.activeTexture(gl.TEXTURE0);
-				gl.bindTexture(gl.TEXTURE_2D, sceneTexture);
-				gl.uniform1i(compositeSharpTextureLocation, 0);
-				gl.activeTexture(gl.TEXTURE1);
-				gl.bindTexture(gl.TEXTURE_2D, blurTextureB);
-				gl.uniform1i(compositeBlurTextureLocation, 1);
-				gl.uniform2f(compositeResolutionLocation, canvas.width, canvas.height);
-				gl.uniform2f(compositeMouseLocation, mouse.x, mouse.y);
-				gl.uniform4f(
-					compositeDepthOfFieldLocation,
-					lavaControls.dofFocus,
-					lavaControls.dofRange,
-					lavaControls.dofStrength,
-					lavaControls.dofDynamic,
-				);
-				gl.uniform1f(compositeStrengthLocation, lavaControls.dofStrength);
-				drawFullscreen(compositeProgram, compositePositionLocation);
-			}
-
 			animationFrame = requestAnimationFrame(render);
 		};
 
@@ -822,22 +673,6 @@ export function BrandLavaField({
 			}
 			if (program) {
 				gl.deleteProgram(program);
-			}
-			if (blurProgram) {
-				gl.deleteProgram(blurProgram);
-			}
-			if (compositeProgram) {
-				gl.deleteProgram(compositeProgram);
-			}
-			for (const framebuffer of [sceneFramebuffer, blurFramebufferA, blurFramebufferB]) {
-				if (framebuffer) {
-					gl.deleteFramebuffer(framebuffer);
-				}
-			}
-			for (const texture of [sceneTexture, blurTextureA, blurTextureB]) {
-				if (texture) {
-					gl.deleteTexture(texture);
-				}
 			}
 		};
 	}, []);

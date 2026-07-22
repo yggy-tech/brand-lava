@@ -43,13 +43,6 @@ export type BrandLavaFieldProps = {
 		z?: readonly [number, number];
 		bounce?: number;
 	};
-	depthOfField?: {
-		enabled?: boolean;
-		dynamic?: boolean;
-		focus?: number;
-		range?: number;
-		strength?: number;
-	};
 	blobCount?: number;
 	blobSize?: number;
 	blobSizeRange?: readonly [number, number];

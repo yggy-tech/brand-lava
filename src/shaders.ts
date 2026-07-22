@@ -26,7 +26,6 @@ export const fragmentSource = `
 	uniform vec4 uBlobSpheres[12];
 	uniform vec4 uConnectionStart[12];
 	uniform vec4 uConnectionEnd[12];
-	uniform vec4 uDepthOfField;
 
 	float smin(float a, float b, float k) {
 		float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
@@ -141,64 +140,6 @@ export const fragmentSource = `
 		float vignette = smoothstep(1.35, 0.12, length(uv) * 1.05);
 		float dither = fract((gl_FragCoord.x + gl_FragCoord.y * 1.61803398875) * 0.5) - 0.5;
 		color += dither / 510.0;
-		float encodedDepth = hit * (0.02 + clamp(travel / 7.0, 0.0, 1.0) * 0.98);
-		float outputAlpha = mix(1.0, encodedDepth, step(0.5, uDepthOfField.w));
-		gl_FragColor = vec4(color * mix(0.86, 1.04, vignette), outputAlpha);
-	}
-`;
-
-export const blurFragmentSource = `
-	precision highp float;
-
-	uniform sampler2D uTexture;
-	uniform vec2 uResolution;
-	uniform vec2 uDirection;
-	uniform float uStrength;
-
-	void main() {
-		vec2 uv = gl_FragCoord.xy / uResolution.xy;
-		vec2 stepSize = uDirection / uResolution.xy * mix(1.0, 6.0, clamp(uStrength / 4.0, 0.0, 1.0));
-		vec4 color = texture2D(uTexture, uv) * 0.2270270270;
-		color += texture2D(uTexture, uv + stepSize * 1.3846153846) * 0.1581081081;
-		color += texture2D(uTexture, uv - stepSize * 1.3846153846) * 0.1581081081;
-		color += texture2D(uTexture, uv + stepSize * 3.2307692308) * 0.0351351351;
-		color += texture2D(uTexture, uv - stepSize * 3.2307692308) * 0.0351351351;
-		color += texture2D(uTexture, uv + stepSize * 5.1764705882) * 0.0117567568;
-		color += texture2D(uTexture, uv - stepSize * 5.1764705882) * 0.0117567568;
-		color += texture2D(uTexture, uv + stepSize * 7.1176470588) * 0.0054864865;
-		color += texture2D(uTexture, uv - stepSize * 7.1176470588) * 0.0054864865;
-		color /= 0.648;
-		gl_FragColor = color;
-	}
-`;
-
-export const compositeFragmentSource = `
-	precision highp float;
-
-	uniform sampler2D uSharpTexture;
-	uniform sampler2D uBlurTexture;
-	uniform vec2 uResolution;
-	uniform vec2 uMouse;
-	uniform vec4 uDepthOfField;
-	uniform float uStrength;
-
-	void main() {
-		vec2 uv = gl_FragCoord.xy / uResolution.xy;
-		vec4 sharp = texture2D(uSharpTexture, uv);
-		vec4 blurred = texture2D(uBlurTexture, uv);
-		float surfaceDepth = max(0.0, (sharp.a - 0.02) / 0.98) * 7.0;
-		float cursorSample = texture2D(uSharpTexture, uMouse).a;
-		float cursorDepth = max(0.0, (cursorSample - 0.02) / 0.98) * 7.0;
-		float dynamic = uDepthOfField.w;
-		float focalDepth = mix(uDepthOfField.x, cursorDepth, dynamic);
-		float cursorHasSurface = step(0.01, cursorSample);
-		float dynamicGate = mix(1.0, cursorHasSurface, dynamic);
-		float depthDelta = abs(surfaceDepth - focalDepth);
-		float focalBand = max(0.025, uDepthOfField.y * 0.28);
-		float mask = step(0.01, sharp.a)
-			* smoothstep(focalBand * 0.18, focalBand, depthDelta)
-			* dynamicGate
-			* smoothstep(0.0, 0.45, uStrength);
-		gl_FragColor = vec4(mix(sharp.rgb, blurred.rgb, mask), 1.0);
+		gl_FragColor = vec4(color * mix(0.86, 1.04, vignette), 1.0);
 	}
 `;
