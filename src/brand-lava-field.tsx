@@ -567,8 +567,12 @@ export function BrandLavaField({
 			targetMouse.x = (event.clientX - rect.left) / rect.width;
 			targetMouse.y = 1 - (event.clientY - rect.top) / rect.height;
 		};
-		const onDown = () => {
-			pushBlobPulse(blobs, lavaControlsRef.current, mouse);
+		const onDown = (event: PointerEvent) => {
+			const rect = root.getBoundingClientRect();
+			pushBlobPulse(blobs, lavaControlsRef.current, {
+				x: (event.clientX - rect.left) / rect.width,
+				y: 1 - (event.clientY - rect.top) / rect.height,
+			});
 		};
 		const onLeave = () => {
 			targetMouse.x = 0.5;
