@@ -1,390 +1,15 @@
 import { useEffect, useRef } from "react";
-
-type Rgb = readonly [number, number, number];
-export type BrandLavaHighlight = {
-	x: number;
-	y: number;
-	radius?: number;
-	intensity?: number;
-	color?: string;
-};
-
-export type BrandLavaDistribution = "column" | "balanced" | "spread";
-
-export type BrandLavaFieldProps = {
-	highlights?: readonly BrandLavaHighlight[];
-	cursorLight?: {
-		radius?: number;
-		intensity?: number;
-		color?: string;
-	};
-	fieldInteraction?: {
-		enabled?: boolean;
-		attraction?: number;
-		repulsion?: number;
-		range?: number;
-	};
-	satellites?: {
-		enabled?: boolean;
-		count?: number;
-		size?: number;
-		drift?: number;
-	};
-	connections?: {
-		mode?: "none" | "elastic";
-		count?: number;
-		segments?: number;
-		radius?: number;
-		tension?: number;
-		damping?: number;
-		wobble?: number;
-		blend?: number;
-	};
-	bounds?: {
-		x?: readonly [number, number];
-		y?: readonly [number, number];
-		z?: readonly [number, number];
-		bounce?: number;
-	};
-	depthOfField?: {
-		enabled?: boolean;
-		focus?: number;
-		range?: number;
-		strength?: number;
-	};
-	blobCount?: number;
-	blobSize?: number;
-	blobSizeRange?: readonly [number, number];
-	distribution?: BrandLavaDistribution;
-	speed?: number;
-	gravity?: number;
-	attraction?: number;
-	mergeSmoothness?: number;
-	clickPulse?: {
-		strength?: number;
-		decay?: number;
-	};
-};
-
-type ThemeColors = {
-	background: Rgb;
-	card: Rgb;
-	lavaA: Rgb;
-	lavaB: Rgb;
-	lavaC: Rgb;
-};
-
-type BlobState = {
-	x: number;
-	y: number;
-	z: number;
-	vx: number;
-	vy: number;
-	targetX: number;
-	targetY: number;
-	offsetX: number;
-	offsetY: number;
-	phase: number;
-	radiusSeed: number;
-};
-
-type ElasticPoint = {
-	x: number;
-	y: number;
-	z: number;
-	vx: number;
-	vy: number;
-	vz: number;
-};
-
-type ElasticConnection = {
-	from: number;
-	to: number;
-	bend: number;
-	points: ElasticPoint[];
-};
-
-type SatelliteBlob = {
-	from: number;
-	to: number;
-	phase: number;
-	offset: number;
-};
-
-function cssColorToRgb(value: string, fallback: Rgb): Rgb {
-	const color = value.trim();
-	const cssVariable = color.match(/^var\(\s*(--[\w-]+)/);
-	if (cssVariable && typeof document !== "undefined") {
-		const resolved = getComputedStyle(document.documentElement).getPropertyValue(cssVariable[1]);
-		if (resolved.trim()) {
-			return cssColorToRgb(resolved, fallback);
-		}
-	}
-
-	const hex = color.match(/^#([0-9a-f]{6})$/i);
-	if (hex) {
-		const raw = Number.parseInt(hex[1], 16);
-		return [((raw >> 16) & 255) / 255, ((raw >> 8) & 255) / 255, (raw & 255) / 255];
-	}
-
-	const rgb = color.match(/^rgb\(\s*(\d+)\s+(\d+)\s+(\d+)/i) ?? color.match(/^rgb\(\s*(\d+),\s*(\d+),\s*(\d+)/i);
-	if (rgb) {
-		return [Number(rgb[1]) / 255, Number(rgb[2]) / 255, Number(rgb[3]) / 255];
-	}
-
-	return fallback;
-}
-
-function readThemeColors(): ThemeColors {
-	const styles = getComputedStyle(document.documentElement);
-
-	return {
-		background: cssColorToRgb(styles.getPropertyValue("--background"), [0.94, 0.92, 0.9]),
-		card: cssColorToRgb(styles.getPropertyValue("--card"), [0.98, 0.98, 0.91]),
-		lavaA: cssColorToRgb(
-			styles.getPropertyValue("--brand-lava-1") || styles.getPropertyValue("--auth-lava-1"),
-			[0.58, 0.68, 0.34],
-		),
-		lavaB: cssColorToRgb(
-			styles.getPropertyValue("--brand-lava-2") || styles.getPropertyValue("--auth-lava-2"),
-			[0.39, 0.48, 0.24],
-		),
-		lavaC: cssColorToRgb(
-			styles.getPropertyValue("--brand-lava-3") || styles.getPropertyValue("--auth-lava-3"),
-			[0.27, 0.35, 0.16],
-		),
-	};
-}
-
-function createShader(gl: WebGLRenderingContext, source: string, type: number): WebGLShader {
-	const shader = gl.createShader(type);
-	if (!shader) {
-		throw new Error("Failed to create shader");
-	}
-
-	gl.shaderSource(shader, source);
-	gl.compileShader(shader);
-
-	if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-		const error = gl.getShaderInfoLog(shader);
-		gl.deleteShader(shader);
-		throw new Error(`Shader compile failed: ${error}`);
-	}
-
-	return shader;
-}
-
-function activateProgram(gl: WebGLRenderingContext, program: WebGLProgram) {
-	const useWebGlProgram = Reflect.get(gl, "useProgram") as WebGLRenderingContext["useProgram"];
-	useWebGlProgram.call(gl, program);
-}
-
-function createProgram(gl: WebGLRenderingContext, vertexSource: string, fragmentSource: string): WebGLProgram {
-	const vertexShader = createShader(gl, vertexSource, gl.VERTEX_SHADER);
-	const fragmentShader = createShader(gl, fragmentSource, gl.FRAGMENT_SHADER);
-	const program = gl.createProgram();
-
-	if (!program) {
-		gl.deleteShader(vertexShader);
-		gl.deleteShader(fragmentShader);
-		throw new Error("Failed to create program");
-	}
-
-	gl.attachShader(program, vertexShader);
-	gl.attachShader(program, fragmentShader);
-	gl.linkProgram(program);
-
-	gl.deleteShader(vertexShader);
-	gl.deleteShader(fragmentShader);
-
-	if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-		const error = gl.getProgramInfoLog(program);
-		gl.deleteProgram(program);
-		throw new Error(`Shader link failed: ${error}`);
-	}
-
-	return program;
-}
-
-const vertexSource = `
-	attribute vec2 aPosition;
-
-	void main() {
-		gl_Position = vec4(aPosition, 0.0, 1.0);
-	}
-`;
-
-const fragmentSource = `
-	precision highp float;
-
-	uniform vec2 uResolution;
-	uniform float uTime;
-	uniform vec2 uMouse;
-	uniform vec3 uBackground;
-	uniform vec3 uCard;
-	uniform vec3 uLavaA;
-	uniform vec3 uLavaB;
-	uniform vec3 uLavaC;
-	uniform vec4 uHighlights[4];
-	uniform vec3 uHighlightColors[4];
-	uniform vec4 uCursorLight;
-	uniform vec3 uCursorLightColor;
-	uniform vec4 uLavaShape;
-	uniform vec4 uLavaMotion;
-	uniform vec4 uBlobSpheres[12];
-	uniform vec4 uConnectionStart[12];
-	uniform vec4 uConnectionEnd[12];
-	uniform vec4 uDepthOfField;
-
-	float smin(float a, float b, float k) {
-		float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
-		return mix(b, a, h) - k * h * (1.0 - h);
-	}
-
-	vec3 rotateX(vec3 p, float a) {
-		float s = sin(a);
-		float c = cos(a);
-		return vec3(p.x, c * p.y - s * p.z, s * p.y + c * p.z);
-	}
-
-	vec3 rotateY(vec3 p, float a) {
-		float s = sin(a);
-		float c = cos(a);
-		return vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z);
-	}
-
-	float sdSphere(vec3 p, vec3 c, float r) {
-		return length(p - c) - r;
-	}
-
-	float sdCapsule(vec3 p, vec3 a, vec3 b, float r) {
-		vec3 pa = p - a;
-		vec3 ba = b - a;
-		float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-		return length(pa - ba * h) - r;
-	}
-
-	float mapField(vec3 p, float t) {
-		float d = 8.0;
-
-		for (int i = 0; i < 12; i++) {
-			vec4 sphere = uBlobSpheres[i];
-			if (sphere.w > 0.001) {
-				d = smin(d, sdSphere(p, sphere.xyz, sphere.w), uLavaShape.w);
-			}
-		}
-
-		for (int i = 0; i < 12; i++) {
-			vec4 start = uConnectionStart[i];
-			vec4 end = uConnectionEnd[i];
-			if (end.w > 0.0) {
-				d = smin(d, sdCapsule(p, start.xyz, end.xyz, start.w), end.w);
-			}
-		}
-
-		return d;
-	}
-
-	vec3 normalAt(vec3 p, float t) {
-		vec2 e = vec2(0.0022, 0.0);
-		return normalize(vec3(
-			mapField(p + e.xyy, t) - mapField(p - e.xyy, t),
-			mapField(p + e.yxy, t) - mapField(p - e.yxy, t),
-			mapField(p + e.yyx, t) - mapField(p - e.yyx, t)
-		));
-	}
-
-	vec3 shadeRay(vec2 uv, float time, out float travelOut, out float hitOut) {
-		vec3 ro = vec3(uv * 1.42, 4.45);
-		vec3 rd = vec3(0.0, 0.0, -1.0);
-		float travel = 0.0;
-		float hit = 0.0;
-		float maxDist = 7.0;
-
-		for (int i = 0; i < 68; i++) {
-			vec3 pos = ro + rd * travel;
-			float d = mapField(pos, time * uLavaMotion.x);
-
-			if (d < 0.0032) {
-				hit = 1.0;
-				break;
-			}
-
-			travel += max(0.004, d * 0.52);
-			if (travel > maxDist) {
-				break;
-			}
-		}
-
-		float paper = smoothstep(-0.9, 0.9, uv.y);
-		float warm = smoothstep(1.1, 0.0, length(uv - vec2(-0.05, -0.1)));
-		vec3 color = mix(uBackground, uCard, 0.42 + paper * 0.2);
-		color = mix(color, uLavaB, warm * 0.16);
-		vec2 screenUv = gl_FragCoord.xy / uResolution.xy;
-		float cursorLight = smoothstep(uCursorLight.z, 0.0, length(screenUv - uMouse)) * uCursorLight.w;
-
-		vec3 p = ro + rd * travel;
-		if (hit > 0.5) {
-			vec3 n = normalAt(p, time * uLavaMotion.x);
-			float fresnel = pow(1.0 - max(dot(n, -rd), 0.0), 2.0);
-			float light = clamp(dot(n, normalize(vec3(-0.35, 0.7, 0.5))), 0.0, 1.0);
-			float glow = 1.0 - clamp(travel / maxDist, 0.0, 1.0);
-			float wave = sin(p.y * 3.2 + p.x * 1.25 + time * 0.75) * 0.5 + 0.5;
-
-			vec3 lava = mix(uLavaC, uLavaB, smoothstep(0.0, 1.0, wave * 0.22 + light * 0.56));
-			lava = mix(lava, uLavaA, fresnel * 0.12 + glow * 0.06);
-			lava += uCard * fresnel * 0.08;
-			lava = mix(lava, uCursorLightColor, cursorLight * 0.18);
-			color = lava;
-		}
-
-		travelOut = travel;
-		hitOut = hit;
-		return color;
-	}
-
-	void main() {
-		vec2 uv = (gl_FragCoord.xy / uResolution.xy - 0.5) * vec2(uResolution.x / uResolution.y, 1.0);
-		vec2 screenUv = gl_FragCoord.xy / uResolution.xy;
-		float travel = 0.0;
-		float hit = 0.0;
-		vec3 color = shadeRay(uv, uTime, travel, hit);
-		float cursorBlobGate = hit * smoothstep(uCursorLight.z, 0.0, length(screenUv - uMouse));
-		float blurAmount =
-			smoothstep(0.0, uDepthOfField.y, abs(travel - uDepthOfField.x)) * uDepthOfField.z * uDepthOfField.w * cursorBlobGate;
-		if (blurAmount > 0.01) {
-			vec2 px = vec2(1.0 / uResolution.x, 1.0 / uResolution.y);
-			float radius = blurAmount * 18.0;
-			float t1 = 0.0;
-			float h1 = 0.0;
-			float t2 = 0.0;
-			float h2 = 0.0;
-			float t3 = 0.0;
-			float h3 = 0.0;
-			float t4 = 0.0;
-			float h4 = 0.0;
-			vec2 uvStep = px * radius * vec2(uResolution.x / uResolution.y, 1.0);
-			vec3 blur =
-				shadeRay(uv + vec2(uvStep.x, 0.0), uTime, t1, h1) +
-				shadeRay(uv - vec2(uvStep.x, 0.0), uTime, t2, h2) +
-				shadeRay(uv + vec2(0.0, uvStep.y), uTime, t3, h3) +
-				shadeRay(uv - vec2(0.0, uvStep.y), uTime, t4, h4);
-			color = mix(color, blur * 0.25, blurAmount);
-		}
-
-		for (int i = 0; i < 4; i++) {
-			vec4 highlight = uHighlights[i];
-			float area = smoothstep(highlight.z, 0.0, length(screenUv - highlight.xy)) * highlight.w;
-			color = mix(color, uHighlightColors[i], area);
-			color += uHighlightColors[i] * area * 0.16;
-		}
-
-		float vignette = smoothstep(1.35, 0.12, length(uv) * 1.05);
-		float dither = fract((gl_FragCoord.x + gl_FragCoord.y * 1.61803398875) * 0.5) - 0.5;
-		color += dither / 510.0;
-		gl_FragColor = vec4(color * mix(0.86, 1.04, vignette), 1.0);
-	}
-`;
+import { blurFragmentSource, compositeFragmentSource, fragmentSource, vertexSource } from "./shaders";
+import { cssColorToRgb, readThemeColors } from "./theme";
+import type {
+	BlobState,
+	BrandLavaDistribution,
+	BrandLavaFieldProps,
+	BrandLavaHighlight,
+	ElasticConnection,
+	SatelliteBlob,
+} from "./types";
+import { activateProgram, createFramebuffer, createProgram, createRenderTexture } from "./webgl";
 
 function clampUnit(value: number): number {
 	return Math.max(0, Math.min(1, value));
@@ -765,8 +390,12 @@ export function BrandLavaField({
 
 		let animationFrame = 0;
 		let program: WebGLProgram | null = null;
+		let blurProgram: WebGLProgram | null = null;
+		let compositeProgram: WebGLProgram | null = null;
 		let positionBuffer: WebGLBuffer | null = null;
 		let positionLocation = -1;
+		let blurPositionLocation = -1;
+		let compositePositionLocation = -1;
 		let resolutionLocation: WebGLUniformLocation | null = null;
 		let timeLocation: WebGLUniformLocation | null = null;
 		let mouseLocation: WebGLUniformLocation | null = null;
@@ -785,15 +414,33 @@ export function BrandLavaField({
 		let connectionStartLocations: (WebGLUniformLocation | null)[] = [];
 		let connectionEndLocations: (WebGLUniformLocation | null)[] = [];
 		let depthOfFieldLocation: WebGLUniformLocation | null = null;
+		let blurTextureLocation: WebGLUniformLocation | null = null;
+		let blurResolutionLocation: WebGLUniformLocation | null = null;
+		let blurDirectionLocation: WebGLUniformLocation | null = null;
+		let blurStrengthLocation: WebGLUniformLocation | null = null;
+		let compositeSharpTextureLocation: WebGLUniformLocation | null = null;
+		let compositeBlurTextureLocation: WebGLUniformLocation | null = null;
+		let compositeResolutionLocation: WebGLUniformLocation | null = null;
+		let compositeStrengthLocation: WebGLUniformLocation | null = null;
+		let sceneTexture: WebGLTexture | null = null;
+		let blurTextureA: WebGLTexture | null = null;
+		let blurTextureB: WebGLTexture | null = null;
+		let sceneFramebuffer: WebGLFramebuffer | null = null;
+		let blurFramebufferA: WebGLFramebuffer | null = null;
+		let blurFramebufferB: WebGLFramebuffer | null = null;
 
 		try {
 			program = createProgram(gl, vertexSource, fragmentSource);
+			blurProgram = createProgram(gl, vertexSource, blurFragmentSource);
+			compositeProgram = createProgram(gl, vertexSource, compositeFragmentSource);
 			positionBuffer = gl.createBuffer();
 			if (!positionBuffer) {
 				throw new Error("Unable to allocate position buffer");
 			}
 
 			positionLocation = gl.getAttribLocation(program, "aPosition");
+			blurPositionLocation = gl.getAttribLocation(blurProgram, "aPosition");
+			compositePositionLocation = gl.getAttribLocation(compositeProgram, "aPosition");
 			resolutionLocation = gl.getUniformLocation(program, "uResolution");
 			timeLocation = gl.getUniformLocation(program, "uTime");
 			mouseLocation = gl.getUniformLocation(program, "uMouse");
@@ -820,6 +467,14 @@ export function BrandLavaField({
 				gl.getUniformLocation(program, `uConnectionEnd[${index}]`),
 			);
 			depthOfFieldLocation = gl.getUniformLocation(program, "uDepthOfField");
+			blurTextureLocation = gl.getUniformLocation(blurProgram, "uTexture");
+			blurResolutionLocation = gl.getUniformLocation(blurProgram, "uResolution");
+			blurDirectionLocation = gl.getUniformLocation(blurProgram, "uDirection");
+			blurStrengthLocation = gl.getUniformLocation(blurProgram, "uStrength");
+			compositeSharpTextureLocation = gl.getUniformLocation(compositeProgram, "uSharpTexture");
+			compositeBlurTextureLocation = gl.getUniformLocation(compositeProgram, "uBlurTexture");
+			compositeResolutionLocation = gl.getUniformLocation(compositeProgram, "uResolution");
+			compositeStrengthLocation = gl.getUniformLocation(compositeProgram, "uStrength");
 
 			if (
 				resolutionLocation === null ||
@@ -840,7 +495,17 @@ export function BrandLavaField({
 				connectionEndLocations.some((location) => location === null) ||
 				highlightLocations.some((location) => location === null) ||
 				highlightColorLocations.some((location) => location === null) ||
-				positionLocation < 0
+				blurTextureLocation === null ||
+				blurResolutionLocation === null ||
+				blurDirectionLocation === null ||
+				blurStrengthLocation === null ||
+				compositeSharpTextureLocation === null ||
+				compositeBlurTextureLocation === null ||
+				compositeResolutionLocation === null ||
+				compositeStrengthLocation === null ||
+				positionLocation < 0 ||
+				blurPositionLocation < 0 ||
+				compositePositionLocation < 0
 			) {
 				throw new Error("Unable to initialize WebGL uniform attributes");
 			}
@@ -854,6 +519,12 @@ export function BrandLavaField({
 		} catch {
 			if (program) {
 				gl.deleteProgram(program);
+			}
+			if (blurProgram) {
+				gl.deleteProgram(blurProgram);
+			}
+			if (compositeProgram) {
+				gl.deleteProgram(compositeProgram);
 			}
 			if (positionBuffer) {
 				gl.deleteBuffer(positionBuffer);
@@ -888,6 +559,22 @@ export function BrandLavaField({
 			const dpr = Math.max(1, Math.min(window.devicePixelRatio, 2));
 			canvas.width = Math.max(1, Math.floor(rect.width * dpr));
 			canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+			for (const framebuffer of [sceneFramebuffer, blurFramebufferA, blurFramebufferB]) {
+				if (framebuffer) {
+					gl.deleteFramebuffer(framebuffer);
+				}
+			}
+			for (const texture of [sceneTexture, blurTextureA, blurTextureB]) {
+				if (texture) {
+					gl.deleteTexture(texture);
+				}
+			}
+			sceneTexture = createRenderTexture(gl, canvas.width, canvas.height);
+			blurTextureA = createRenderTexture(gl, canvas.width, canvas.height);
+			blurTextureB = createRenderTexture(gl, canvas.width, canvas.height);
+			sceneFramebuffer = sceneTexture ? createFramebuffer(gl, sceneTexture) : null;
+			blurFramebufferA = blurTextureA ? createFramebuffer(gl, blurTextureA) : null;
+			blurFramebufferB = blurTextureB ? createFramebuffer(gl, blurTextureB) : null;
 			gl.viewport(0, 0, canvas.width, canvas.height);
 		};
 
@@ -897,9 +584,19 @@ export function BrandLavaField({
 		});
 		observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
 
+		const drawFullscreen = (activeProgram: WebGLProgram, activePositionLocation: number) => {
+			activateProgram(gl, activeProgram);
+			gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+			gl.enableVertexAttribArray(activePositionLocation);
+			gl.vertexAttribPointer(activePositionLocation, 2, gl.FLOAT, false, 0, 0);
+			gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+		};
+
 		const render = (time: number) => {
 			if (
 				!program ||
+				!blurProgram ||
+				!compositeProgram ||
 				!resolutionLocation ||
 				!timeLocation ||
 				!mouseLocation ||
@@ -917,6 +614,18 @@ export function BrandLavaField({
 				return;
 			}
 
+			const lavaControls = lavaControlsRef.current;
+			const usePostprocess = Boolean(
+				lavaControls.dofEnabled > 0 &&
+					sceneFramebuffer &&
+					blurFramebufferA &&
+					blurFramebufferB &&
+					sceneTexture &&
+					blurTextureA &&
+					blurTextureB,
+			);
+			gl.bindFramebuffer(gl.FRAMEBUFFER, usePostprocess ? sceneFramebuffer : null);
+			gl.viewport(0, 0, canvas.width, canvas.height);
 			activateProgram(gl, program);
 			mouse.x += (targetMouse.x - mouse.x) * 0.026;
 			mouse.y += (targetMouse.y - mouse.y) * 0.026;
@@ -928,7 +637,6 @@ export function BrandLavaField({
 			gl.uniform3f(lavaALocation, themeColors.lavaA[0], themeColors.lavaA[1], themeColors.lavaA[2]);
 			gl.uniform3f(lavaBLocation, themeColors.lavaB[0], themeColors.lavaB[1], themeColors.lavaB[2]);
 			gl.uniform3f(lavaCLocation, themeColors.lavaC[0], themeColors.lavaC[1], themeColors.lavaC[2]);
-			const lavaControls = lavaControlsRef.current;
 			updateBlobStates(blobs, lavaControls, time * 0.001, mouse);
 			updateElasticConnections(elasticConnections, blobs, lavaControls, time * 0.001);
 			gl.uniform4f(
@@ -1032,7 +740,50 @@ export function BrandLavaField({
 				gl.uniform4f(location, x, y, radius, intensity);
 				gl.uniform3f(colorLocation, color[0], color[1], color[2]);
 			}
-			gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+			drawFullscreen(program, positionLocation);
+
+			if (
+				usePostprocess &&
+				sceneTexture &&
+				blurTextureA &&
+				blurTextureB &&
+				sceneFramebuffer &&
+				blurFramebufferA &&
+				blurFramebufferB
+			) {
+				gl.bindFramebuffer(gl.FRAMEBUFFER, blurFramebufferA);
+				gl.viewport(0, 0, canvas.width, canvas.height);
+				activateProgram(gl, blurProgram);
+				gl.activeTexture(gl.TEXTURE0);
+				gl.bindTexture(gl.TEXTURE_2D, sceneTexture);
+				gl.uniform1i(blurTextureLocation, 0);
+				gl.uniform2f(blurResolutionLocation, canvas.width, canvas.height);
+				gl.uniform2f(blurDirectionLocation, 1, 0);
+				gl.uniform1f(blurStrengthLocation, lavaControls.dofStrength);
+				drawFullscreen(blurProgram, blurPositionLocation);
+
+				gl.bindFramebuffer(gl.FRAMEBUFFER, blurFramebufferB);
+				gl.activeTexture(gl.TEXTURE0);
+				gl.bindTexture(gl.TEXTURE_2D, blurTextureA);
+				gl.uniform1i(blurTextureLocation, 0);
+				gl.uniform2f(blurResolutionLocation, canvas.width, canvas.height);
+				gl.uniform2f(blurDirectionLocation, 0, 1);
+				gl.uniform1f(blurStrengthLocation, lavaControls.dofStrength);
+				drawFullscreen(blurProgram, blurPositionLocation);
+
+				gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+				gl.viewport(0, 0, canvas.width, canvas.height);
+				activateProgram(gl, compositeProgram);
+				gl.activeTexture(gl.TEXTURE0);
+				gl.bindTexture(gl.TEXTURE_2D, sceneTexture);
+				gl.uniform1i(compositeSharpTextureLocation, 0);
+				gl.activeTexture(gl.TEXTURE1);
+				gl.bindTexture(gl.TEXTURE_2D, blurTextureB);
+				gl.uniform1i(compositeBlurTextureLocation, 1);
+				gl.uniform2f(compositeResolutionLocation, canvas.width, canvas.height);
+				gl.uniform1f(compositeStrengthLocation, lavaControls.dofStrength);
+				drawFullscreen(compositeProgram, compositePositionLocation);
+			}
 
 			animationFrame = requestAnimationFrame(render);
 		};
@@ -1056,6 +807,22 @@ export function BrandLavaField({
 			}
 			if (program) {
 				gl.deleteProgram(program);
+			}
+			if (blurProgram) {
+				gl.deleteProgram(blurProgram);
+			}
+			if (compositeProgram) {
+				gl.deleteProgram(compositeProgram);
+			}
+			for (const framebuffer of [sceneFramebuffer, blurFramebufferA, blurFramebufferB]) {
+				if (framebuffer) {
+					gl.deleteFramebuffer(framebuffer);
+				}
+			}
+			for (const texture of [sceneTexture, blurTextureA, blurTextureB]) {
+				if (texture) {
+					gl.deleteTexture(texture);
+				}
 			}
 		};
 	}, []);
