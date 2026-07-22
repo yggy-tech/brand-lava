@@ -1,0 +1,39 @@
+id: brand-lava
+
+owners:
+  defaultOwner: "@frontend"
+
+stack: frontend
+language: typescript
+type: library
+
+tags:
+  - frontend
+  - brand
+  - components
+
+tasks:
+  build:
+    command: tsdown
+    inputs:
+      - "@globs(sources)"
+      - "tsdown.config.*"
+      - "tsconfig.build.json"
+      - "styles.css"
+    outputs:
+      - "dist"
+
+  build-watch:
+    command: tsdown
+    args:
+      - --watch
+    local: true
+    options:
+      persistent: true
+    inputs:
+      - "@globs(sources)"
+      - "tsdown.config.*"
+      - "tsconfig.build.json"
+      - "styles.css"
+    outputs:
+      - "dist"

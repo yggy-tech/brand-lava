@@ -1,0 +1,17 @@
+{
+  "name": "@yggdrasil/brand-lava",
+  "version": "0.1.4",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./package.json": "./package.json",
+    "./styles.css": "./styles.css"
+  },
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "peerDependencies": {
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
+  }
+}
