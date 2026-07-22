@@ -46,6 +46,12 @@ export type BrandLavaFieldProps = {
 		range?: number;
 		strength?: number;
 	};
+	bounds?: {
+		x?: readonly [number, number];
+		y?: readonly [number, number];
+		z?: readonly [number, number];
+		bounce?: number;
+	};
 	blobCount?: number;
 	blobSize?: number;
 	distribution?: BrandLavaDistribution;
@@ -408,7 +414,32 @@ function normalizeLavaControls(props: BrandLavaFieldProps) {
 		dofFocus: Math.max(0.5, Math.min(7, props.depthOfField?.focus ?? 4.2)),
 		dofRange: Math.max(0.05, Math.min(3, props.depthOfField?.range ?? 1.1)),
 		dofStrength: Math.max(0, Math.min(1, props.depthOfField?.strength ?? 0.34)),
+		boundsX: props.bounds?.x ?? ([-0.82, 0.82] as const),
+		boundsY: props.bounds?.y ?? ([-1.52, 1.58] as const),
+		boundsZ: props.bounds?.z ?? ([-0.36, 0.36] as const),
+		zDepthScale: Math.max(0.2, Math.min(4, ((props.bounds?.z?.[1] ?? 0.36) - (props.bounds?.z?.[0] ?? -0.36)) / 0.72)),
+		boundsBounce: Math.max(0, Math.min(1, props.bounds?.bounce ?? 0.42)),
 	};
+}
+
+function clampRange(value: number, range: readonly [number, number]): number {
+	return Math.max(range[0], Math.min(range[1], value));
+}
+
+function applyBounds(blob: BlobState, controls: ReturnType<typeof normalizeLavaControls>) {
+	const nextX = clampRange(blob.x, controls.boundsX);
+	const nextY = clampRange(blob.y, controls.boundsY);
+	if (nextX !== blob.x) {
+		blob.x = nextX;
+		blob.vx *= -controls.boundsBounce;
+		blob.offsetX *= 0.72;
+	}
+	if (nextY !== blob.y) {
+		blob.y = nextY;
+		blob.vy *= -controls.boundsBounce;
+		blob.offsetY *= 0.72;
+	}
+	blob.z = clampRange(blob.z, controls.boundsZ);
 }
 
 function createBlobStates(): BlobState[] {
@@ -537,7 +568,7 @@ function updateBlobStates(
 		blob.targetX = Math.cos(phase + 0.7 * Math.sin(time * 0.38 * controls.speed + index * 1.1)) * drift + blob.offsetX;
 		blob.targetY =
 			baseY + Math.sin(phase * 0.9 + time * 0.42 * controls.speed) * (0.08 + distribution * 0.08) + blob.offsetY;
-		blob.z = Math.cos(phase * 0.67 + time * 0.5 * controls.speed) * (0.18 + distribution * 0.16);
+		blob.z = Math.cos(phase * 0.67 + time * 0.5 * controls.speed) * (0.18 + distribution * 0.16) * controls.zDepthScale;
 
 		const towardPointerX = pointerX - blob.x;
 		const towardPointerY = pointerY - blob.y;
@@ -567,6 +598,7 @@ function updateBlobStates(
 		blob.vy *= damping;
 		blob.x += blob.vx;
 		blob.y += blob.vy;
+		applyBounds(blob, controls);
 	}
 }
 
@@ -594,6 +626,8 @@ function pushBlobPulse(
 		blob.vy += impulseY;
 		blob.offsetX += impulseX * 4.4;
 		blob.offsetY += impulseY * 4.4;
+		blob.offsetX = clampRange(blob.offsetX, [-0.72, 0.72]);
+		blob.offsetY = clampRange(blob.offsetY, [-0.72, 0.72]);
 	}
 }
 
@@ -604,6 +638,7 @@ export function BrandLavaField({
 	satellites,
 	connections,
 	depthOfField,
+	bounds,
 	blobCount,
 	blobSize,
 	distribution,
@@ -630,6 +665,7 @@ export function BrandLavaField({
 			satellites,
 			connections,
 			depthOfField,
+			bounds,
 		}),
 	);
 	const cursorLightRef = useRef({
@@ -652,6 +688,7 @@ export function BrandLavaField({
 		satellites,
 		connections,
 		depthOfField,
+		bounds,
 	});
 	cursorLightRef.current = {
 		radius: Math.max(0.01, Math.min(1, cursorLight?.radius ?? 0.34)),
@@ -885,9 +922,12 @@ export function BrandLavaField({
 					const drift =
 						Math.sin(time * 0.00042 * lavaControls.speed + satellite.phase) * lavaControls.satelliteDrift * 0.16;
 					const t = 0.5 + Math.sin(time * 0.00023 * lavaControls.speed + satellite.phase) * 0.12;
-					const x = from.x + dx * t + normalX * drift * satellite.offset;
-					const y = from.y + dy * t + normalY * drift * satellite.offset;
-					const z = (from.z + to.z) * 0.5 + Math.cos(time * 0.00031 * lavaControls.speed + satellite.phase) * 0.08;
+					const x = clampRange(from.x + dx * t + normalX * drift * satellite.offset, lavaControls.boundsX);
+					const y = clampRange(from.y + dy * t + normalY * drift * satellite.offset, lavaControls.boundsY);
+					const z = clampRange(
+						(from.z + to.z) * 0.5 + Math.cos(time * 0.00031 * lavaControls.speed + satellite.phase) * 0.08,
+						lavaControls.boundsZ,
+					);
 					const baseRadius = Math.min(0.19 + 0.08 * from.radiusSeed, 0.19 + 0.08 * to.radiusSeed);
 					gl.uniform4f(location, x, y, z, baseRadius * lavaControls.satelliteSize * lavaControls.blobSize);
 					continue;
