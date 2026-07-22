@@ -266,8 +266,8 @@ const fragmentSource = `
 		for (int i = 0; i < 4; i++) {
 			vec4 highlight = uHighlights[i];
 			float area = smoothstep(highlight.z, 0.0, length(screenUv - highlight.xy)) * highlight.w;
-			color = mix(color, uHighlightColors[i], area * 0.82);
-			color += uHighlightColors[i] * area * 0.08;
+			color = mix(color, uHighlightColors[i], area);
+			color += uHighlightColors[i] * area * 0.16;
 		}
 
 		float vignette = smoothstep(1.35, 0.12, length(uv) * 1.05);
@@ -308,12 +308,12 @@ function normalizeLavaControls(props: BrandLavaFieldProps) {
 		blobCount: Math.max(1, Math.min(12, Math.round(props.blobCount ?? 10))),
 		blobSize: Math.max(0.45, Math.min(1.8, props.blobSize ?? 1)),
 		distribution: normalizeDistribution(props.distribution),
-		speed: Math.max(0, Math.min(3, props.speed ?? 1)),
+		speed: Math.max(0, Math.min(3, props.speed ?? 0.72)),
 		gravity: Math.max(-1, Math.min(1, props.gravity ?? 0)),
 		attraction: Math.max(0, Math.min(0.7, props.attraction ?? 0.18)),
 		mergeSmoothness: Math.max(0.05, Math.min(0.6, props.mergeSmoothness ?? 0.25)),
 		clickPulseStrength: Math.max(0, Math.min(2, props.clickPulse?.strength ?? 0.9)),
-		clickPulseDecay: Math.max(0.72, Math.min(0.98, props.clickPulse?.decay ?? 0.88)),
+		clickPulseDecay: Math.max(0.72, Math.min(0.98, props.clickPulse?.decay ?? 0.93)),
 	};
 }
 
@@ -342,8 +342,8 @@ function updateBlobStates(
 	const distribution = controls.distribution;
 	const activeCount = controls.blobCount;
 	const spacing = 0.24 + distribution * 0.09;
-	const damping = Math.min(0.97, controls.clickPulseDecay + 0.04 - Math.min(0.08, controls.speed * 0.02));
-	const spring = 0.004 + controls.speed * 0.004;
+	const damping = Math.min(0.985, controls.clickPulseDecay + 0.035 - Math.min(0.04, controls.speed * 0.012));
+	const spring = 0.0018 + controls.speed * 0.0022;
 
 	for (const [index, blob] of blobs.entries()) {
 		if (index >= activeCount) {
@@ -367,7 +367,7 @@ function updateBlobStates(
 		const pointerPull = Math.max(0, 1 - pointerDistance / 1.65) * controls.attraction * 0.012;
 
 		blob.vx += (blob.targetX - blob.x) * spring + towardPointerX * pointerPull;
-		blob.vy += (blob.targetY - blob.y) * spring + towardPointerY * pointerPull - controls.gravity * 0.0009;
+		blob.vy += (blob.targetY - blob.y) * spring + towardPointerY * pointerPull - controls.gravity * 0.00045;
 		blob.vx *= damping;
 		blob.vy *= damping;
 		blob.x += blob.vx;
@@ -392,7 +392,7 @@ function pushBlobPulse(
 		const dy = blob.y - originY;
 		const distance = Math.max(0.001, Math.hypot(dx, dy));
 		const falloff = Math.max(0, 1 - distance / 1.35);
-		const impulse = controls.clickPulseStrength * falloff * falloff * 0.04;
+		const impulse = controls.clickPulseStrength * falloff * falloff * 0.032;
 		blob.vx += (dx / distance) * impulse;
 		blob.vy += (dy / distance) * impulse;
 	}
