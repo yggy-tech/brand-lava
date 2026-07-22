@@ -9,6 +9,8 @@ export type BrandLavaHighlight = {
 	color?: string;
 };
 
+export type BrandLavaDistribution = "column" | "balanced" | "spread";
+
 export type BrandLavaFieldProps = {
 	highlights?: readonly BrandLavaHighlight[];
 	cursorLight?: {
@@ -16,6 +18,13 @@ export type BrandLavaFieldProps = {
 		intensity?: number;
 		color?: string;
 	};
+	blobCount?: number;
+	blobSize?: number;
+	distribution?: BrandLavaDistribution;
+	speed?: number;
+	gravity?: number;
+	attraction?: number;
+	mergeSmoothness?: number;
 };
 
 type ThemeColors = {
@@ -144,6 +153,8 @@ const fragmentSource = `
 	uniform vec3 uHighlightColors[4];
 	uniform vec4 uCursorLight;
 	uniform vec3 uCursorLightColor;
+	uniform vec4 uLavaShape;
+	uniform vec4 uLavaMotion;
 
 	float smin(float a, float b, float k) {
 		float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
@@ -172,32 +183,35 @@ const fragmentSource = `
 
 	vec3 blobCenter(float index, float t) {
 		float phase = index * 1.61803 + t * 0.18;
-		float drift = 0.34 + hash(index) * 0.18;
-		float level = -1.05 + index * 0.29;
+		float distribution = uLavaShape.z;
+		float drift = (0.28 + hash(index) * 0.24) * mix(0.72, 1.34, distribution);
+		float level = -1.05 + index * mix(0.24, 0.33, distribution);
+		level -= uLavaMotion.z * (0.1 + hash(index + 4.0) * 0.24);
 		return vec3(
 			cos(phase + 0.7 * sin(t * 0.38 + index * 1.1)) * drift,
-			level + sin(phase * 0.9 + t * 0.42) * 0.12,
-			cos(phase * 0.67 + t * 0.5) * 0.26
+			level + sin(phase * 0.9 + t * 0.42) * mix(0.08, 0.16, distribution),
+			cos(phase * 0.67 + t * 0.5) * mix(0.18, 0.34, distribution)
 		);
 	}
 
 	float mapField(vec3 p, float t) {
 		float d = 8.0;
 
-		for (int i = 0; i < 10; i++) {
+		for (int i = 0; i < 12; i++) {
 			float fi = float(i);
+			float active = 1.0 - step(uLavaShape.x, fi);
 			vec3 c = blobCenter(fi, t);
 			vec2 pointer = (uMouse - 0.5) * vec2(1.1, 2.0);
 			vec2 towardPointer = pointer - c.xy;
 			float pointerPull = smoothstep(1.65, 0.0, length(towardPointer));
-			c.xy += towardPointer * pointerPull * 0.18;
-			float radius = 0.19 + 0.08 * hash(fi) + 0.035 * sin(t * 0.36 + fi);
-			d = smin(d, sdSphere(p, c, radius), 0.25);
+			c.xy += towardPointer * pointerPull * uLavaMotion.w;
+			float radius = (0.19 + 0.08 * hash(fi) + 0.035 * sin(t * 0.36 + fi)) * uLavaShape.y * active;
+			d = smin(d, sdSphere(p, c, radius), uLavaShape.w);
 		}
 
-		float base = sdSphere(p, vec3(-0.12, -1.35, 0.0), 0.34);
-		float cap = sdSphere(p, vec3(0.1, 1.48, 0.02), 0.29);
-		return smin(smin(d, base, 0.28), cap, 0.24);
+		float base = sdSphere(p, vec3(-0.12, -1.35 - uLavaMotion.z * 0.08, 0.0), 0.34 * uLavaShape.y);
+		float cap = sdSphere(p, vec3(0.1, 1.48, 0.02), 0.29 * uLavaShape.y);
+		return smin(smin(d, base, uLavaShape.w * 1.12), cap, uLavaShape.w);
 	}
 
 	vec3 normalAt(vec3 p, float t) {
@@ -221,7 +235,7 @@ const fragmentSource = `
 
 		for (int i = 0; i < 80; i++) {
 			vec3 pos = ro + rd * travel;
-			float d = mapField(pos, uTime);
+			float d = mapField(pos, uTime * uLavaMotion.x);
 
 			if (d < 0.0025) {
 				hit = 1.0;
@@ -243,7 +257,7 @@ const fragmentSource = `
 
 		if (hit > 0.5) {
 			vec3 p = ro + rd * travel;
-			vec3 n = normalAt(p, uTime);
+			vec3 n = normalAt(p, uTime * uLavaMotion.x);
 			float fresnel = pow(1.0 - max(dot(n, -rd), 0.0), 2.0);
 			float light = clamp(dot(n, normalize(vec3(-0.35, 0.7, 0.5))), 0.0, 1.0);
 			float glow = 1.0 - clamp(travel / maxDist, 0.0, 1.0);
@@ -285,10 +299,45 @@ function normalizeHighlights(
 	}));
 }
 
-export function BrandLavaField({ highlights, cursorLight }: BrandLavaFieldProps) {
+function normalizeDistribution(distribution: BrandLavaDistribution | undefined): number {
+	if (distribution === "column") {
+		return 0;
+	}
+	if (distribution === "spread") {
+		return 1;
+	}
+	return 0.52;
+}
+
+function normalizeLavaControls(props: BrandLavaFieldProps) {
+	return {
+		blobCount: Math.max(1, Math.min(12, Math.round(props.blobCount ?? 10))),
+		blobSize: Math.max(0.45, Math.min(1.8, props.blobSize ?? 1)),
+		distribution: normalizeDistribution(props.distribution),
+		speed: Math.max(0, Math.min(3, props.speed ?? 1)),
+		gravity: Math.max(-1, Math.min(1, props.gravity ?? 0)),
+		attraction: Math.max(0, Math.min(0.7, props.attraction ?? 0.18)),
+		mergeSmoothness: Math.max(0.05, Math.min(0.6, props.mergeSmoothness ?? 0.25)),
+	};
+}
+
+export function BrandLavaField({
+	highlights,
+	cursorLight,
+	blobCount,
+	blobSize,
+	distribution,
+	speed,
+	gravity,
+	attraction,
+	mergeSmoothness,
+}: BrandLavaFieldProps) {
 	const rootRef = useRef<HTMLDivElement | null>(null);
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
 	const highlightsRef = useRef(normalizeHighlights(highlights));
+	const lavaControlsRef = useRef(
+		normalizeLavaControls({ blobCount, blobSize, distribution, speed, gravity, attraction, mergeSmoothness }),
+	);
 	const cursorLightRef = useRef({
 		radius: Math.max(0.01, Math.min(1, cursorLight?.radius ?? 0.34)),
 		intensity: clampUnit(cursorLight?.intensity ?? 0.7),
@@ -296,6 +345,15 @@ export function BrandLavaField({ highlights, cursorLight }: BrandLavaFieldProps)
 	});
 
 	highlightsRef.current = normalizeHighlights(highlights);
+	lavaControlsRef.current = normalizeLavaControls({
+		blobCount,
+		blobSize,
+		distribution,
+		speed,
+		gravity,
+		attraction,
+		mergeSmoothness,
+	});
 	cursorLightRef.current = {
 		radius: Math.max(0.01, Math.min(1, cursorLight?.radius ?? 0.34)),
 		intensity: clampUnit(cursorLight?.intensity ?? 0.7),
@@ -335,6 +393,8 @@ export function BrandLavaField({ highlights, cursorLight }: BrandLavaFieldProps)
 		let highlightColorLocations: (WebGLUniformLocation | null)[] = [];
 		let cursorLightLocation: WebGLUniformLocation | null = null;
 		let cursorLightColorLocation: WebGLUniformLocation | null = null;
+		let lavaShapeLocation: WebGLUniformLocation | null = null;
+		let lavaMotionLocation: WebGLUniformLocation | null = null;
 
 		try {
 			program = createProgram(gl, vertexSource, fragmentSource);
@@ -358,6 +418,8 @@ export function BrandLavaField({ highlights, cursorLight }: BrandLavaFieldProps)
 			);
 			cursorLightLocation = gl.getUniformLocation(program, "uCursorLight");
 			cursorLightColorLocation = gl.getUniformLocation(program, "uCursorLightColor");
+			lavaShapeLocation = gl.getUniformLocation(program, "uLavaShape");
+			lavaMotionLocation = gl.getUniformLocation(program, "uLavaMotion");
 
 			if (
 				resolutionLocation === null ||
@@ -370,6 +432,8 @@ export function BrandLavaField({ highlights, cursorLight }: BrandLavaFieldProps)
 				lavaCLocation === null ||
 				cursorLightLocation === null ||
 				cursorLightColorLocation === null ||
+				lavaShapeLocation === null ||
+				lavaMotionLocation === null ||
 				highlightLocations.some((location) => location === null) ||
 				highlightColorLocations.some((location) => location === null) ||
 				positionLocation < 0
@@ -431,7 +495,9 @@ export function BrandLavaField({ highlights, cursorLight }: BrandLavaFieldProps)
 				!lavaBLocation ||
 				!lavaCLocation ||
 				!cursorLightLocation ||
-				!cursorLightColorLocation
+				!cursorLightColorLocation ||
+				!lavaShapeLocation ||
+				!lavaMotionLocation
 			) {
 				return;
 			}
@@ -447,6 +513,15 @@ export function BrandLavaField({ highlights, cursorLight }: BrandLavaFieldProps)
 			gl.uniform3f(lavaALocation, themeColors.lavaA[0], themeColors.lavaA[1], themeColors.lavaA[2]);
 			gl.uniform3f(lavaBLocation, themeColors.lavaB[0], themeColors.lavaB[1], themeColors.lavaB[2]);
 			gl.uniform3f(lavaCLocation, themeColors.lavaC[0], themeColors.lavaC[1], themeColors.lavaC[2]);
+			const lavaControls = lavaControlsRef.current;
+			gl.uniform4f(
+				lavaShapeLocation,
+				lavaControls.blobCount,
+				lavaControls.blobSize,
+				lavaControls.distribution,
+				lavaControls.mergeSmoothness,
+			);
+			gl.uniform4f(lavaMotionLocation, lavaControls.speed, 0, lavaControls.gravity, lavaControls.attraction);
 			gl.uniform4f(
 				cursorLightLocation,
 				mouse.x,
