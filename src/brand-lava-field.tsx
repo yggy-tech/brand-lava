@@ -222,8 +222,8 @@ const fragmentSource = `
 			}
 		}
 
-		float bridge = smoothstep(uLavaShape.w * 1.7, 0.0, nearest + secondNearest);
-		float outsideSurface = smoothstep(0.0, uLavaShape.w * 0.8, nearest);
+		float bridge = smoothstep(uLavaShape.w * 0.72, 0.0, nearest + secondNearest);
+		float outsideSurface = smoothstep(0.0, uLavaShape.w * 0.38, nearest);
 		return bridge * outsideSurface;
 	}
 
