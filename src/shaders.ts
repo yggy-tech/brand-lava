@@ -130,8 +130,11 @@ export const fragmentSource = `
 		float hit = 0.0;
 		vec3 color = shadeRay(uv, uTime, travel, hit);
 		float cursorBlobGate = hit * smoothstep(uCursorLight.z, 0.0, length(screenUv - uMouse));
-		float blurAmount =
-			smoothstep(0.0, uDepthOfField.y, abs(travel - uDepthOfField.x)) * uDepthOfField.z * uDepthOfField.w * cursorBlobGate;
+		float blurAmount = smoothstep(
+			uDepthOfField.y * 0.18,
+			uDepthOfField.y,
+			abs(travel - uDepthOfField.x)
+		) * uDepthOfField.w * cursorBlobGate;
 
 		for (int i = 0; i < 4; i++) {
 			vec4 highlight = uHighlights[i];
@@ -143,7 +146,7 @@ export const fragmentSource = `
 		float vignette = smoothstep(1.35, 0.12, length(uv) * 1.05);
 		float dither = fract((gl_FragCoord.x + gl_FragCoord.y * 1.61803398875) * 0.5) - 0.5;
 		color += dither / 510.0;
-		float outputAlpha = mix(1.0, clamp(blurAmount, 0.0, 1.0), step(0.5, uDepthOfField.w));
+		float outputAlpha = mix(1.0, blurAmount, step(0.5, uDepthOfField.w));
 		gl_FragColor = vec4(color * mix(0.86, 1.04, vignette), outputAlpha);
 	}
 `;
@@ -158,12 +161,17 @@ export const blurFragmentSource = `
 
 	void main() {
 		vec2 uv = gl_FragCoord.xy / uResolution.xy;
-		vec2 stepSize = uDirection / uResolution.xy * max(1.0, uStrength * 8.0);
+		vec2 stepSize = uDirection / uResolution.xy * mix(0.75, 3.0, clamp(uStrength / 4.0, 0.0, 1.0));
 		vec4 color = texture2D(uTexture, uv) * 0.2270270270;
-		color += texture2D(uTexture, uv + stepSize * 1.3846153846) * 0.3162162162;
-		color += texture2D(uTexture, uv - stepSize * 1.3846153846) * 0.3162162162;
-		color += texture2D(uTexture, uv + stepSize * 3.2307692308) * 0.0702702703;
-		color += texture2D(uTexture, uv - stepSize * 3.2307692308) * 0.0702702703;
+		color += texture2D(uTexture, uv + stepSize * 1.3846153846) * 0.1581081081;
+		color += texture2D(uTexture, uv - stepSize * 1.3846153846) * 0.1581081081;
+		color += texture2D(uTexture, uv + stepSize * 3.2307692308) * 0.0351351351;
+		color += texture2D(uTexture, uv - stepSize * 3.2307692308) * 0.0351351351;
+		color += texture2D(uTexture, uv + stepSize * 5.1764705882) * 0.0117567568;
+		color += texture2D(uTexture, uv - stepSize * 5.1764705882) * 0.0117567568;
+		color += texture2D(uTexture, uv + stepSize * 7.1176470588) * 0.0054864865;
+		color += texture2D(uTexture, uv - stepSize * 7.1176470588) * 0.0054864865;
+		color /= 0.6420270272;
 		gl_FragColor = color;
 	}
 `;
@@ -178,9 +186,15 @@ export const compositeFragmentSource = `
 
 	void main() {
 		vec2 uv = gl_FragCoord.xy / uResolution.xy;
+		vec2 texel = 1.0 / uResolution.xy;
 		vec4 sharp = texture2D(uSharpTexture, uv);
 		vec4 blurred = texture2D(uBlurTexture, uv);
-		float mask = clamp(sharp.a * uStrength, 0.0, 1.0);
+		float nearbyMask = max(
+			max(texture2D(uSharpTexture, uv + vec2(texel.x * 2.0, 0.0)).a, texture2D(uSharpTexture, uv - vec2(texel.x * 2.0, 0.0)).a),
+			max(texture2D(uSharpTexture, uv + vec2(0.0, texel.y * 2.0)).a, texture2D(uSharpTexture, uv - vec2(0.0, texel.y * 2.0)).a)
+		);
+		float focusMask = max(sharp.a, nearbyMask * 0.72);
+		float mask = smoothstep(0.04, 0.72, focusMask) * smoothstep(0.0, 0.45, uStrength);
 		gl_FragColor = vec4(mix(sharp.rgb, blurred.rgb, mask), 1.0);
 	}
 `;
