@@ -204,9 +204,7 @@ const fragmentSource = `
 			d = smin(d, sdSphere(p, sphere.xyz, sphere.w), uLavaShape.w);
 		}
 
-		float base = sdSphere(p, vec3(-0.12, -1.35 - uLavaMotion.z * 0.08, 0.0), 0.34 * uLavaShape.y);
-		float cap = sdSphere(p, vec3(0.1, 1.48, 0.02), 0.29 * uLavaShape.y);
-		return smin(smin(d, base, uLavaShape.w * 1.12), cap, uLavaShape.w);
+		return d;
 	}
 
 	vec3 normalAt(vec3 p, float t) {
@@ -307,7 +305,7 @@ function normalizeDistribution(distribution: BrandLavaDistribution | undefined):
 
 function normalizeLavaControls(props: BrandLavaFieldProps) {
 	return {
-		blobCount: Math.max(1, Math.min(12, Math.round(props.blobCount ?? 10))),
+		blobCount: Math.max(1, Math.min(12, Math.round(props.blobCount ?? 12))),
 		blobSize: Math.max(0.45, Math.min(1.8, props.blobSize ?? 1)),
 		distribution: normalizeDistribution(props.distribution),
 		speed: Math.max(0, Math.min(3, props.speed ?? 0.72)),
@@ -322,12 +320,12 @@ function normalizeLavaControls(props: BrandLavaFieldProps) {
 function createBlobStates(): BlobState[] {
 	return Array.from({ length: 12 }, (_, index) => ({
 		x: 0,
-		y: -1.05 + index * 0.29,
+		y: index === 0 ? -1.35 : index === 11 ? 1.48 : -1.05 + (index - 1) * 0.29,
 		z: 0,
 		vx: 0,
 		vy: 0,
 		targetX: 0,
-		targetY: -1.05 + index * 0.29,
+		targetY: index === 0 ? -1.35 : index === 11 ? 1.48 : -1.05 + (index - 1) * 0.29,
 		offsetX: 0,
 		offsetY: 0,
 		phase: index * 1.61803,
@@ -360,7 +358,12 @@ function updateBlobStates(
 
 		const phase = blob.phase + time * 0.18 * controls.speed;
 		const drift = (0.28 + blob.radiusSeed * 0.24) * (0.72 + distribution * 0.62);
-		const baseY = -1.05 + index * spacing - controls.gravity * (0.1 + blob.radiusSeed * 0.24);
+		const baseY =
+			index === 0
+				? -1.35 - controls.gravity * 0.08
+				: index === 11
+					? 1.48
+					: -1.05 + (index - 1) * spacing - controls.gravity * (0.1 + blob.radiusSeed * 0.24);
 		blob.targetX = Math.cos(phase + 0.7 * Math.sin(time * 0.38 * controls.speed + index * 1.1)) * drift + blob.offsetX;
 		blob.targetY =
 			baseY + Math.sin(phase * 0.9 + time * 0.42 * controls.speed) * (0.08 + distribution * 0.08) + blob.offsetY;
@@ -640,7 +643,8 @@ export function BrandLavaField({
 				const blob = blobs[index];
 				const active = index < lavaControls.blobCount;
 				const radius = active
-					? (0.19 + 0.08 * blob.radiusSeed + 0.035 * Math.sin(time * 0.00036 * lavaControls.speed + index)) *
+					? ((index === 0 ? 0.34 : index === 11 ? 0.29 : 0.19 + 0.08 * blob.radiusSeed) +
+							0.035 * Math.sin(time * 0.00036 * lavaControls.speed + index)) *
 						lavaControls.blobSize
 					: 0;
 				gl.uniform4f(location, blob.x, blob.y, blob.z, radius);
