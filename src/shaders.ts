@@ -157,7 +157,7 @@ export const blurFragmentSource = `
 
 	void main() {
 		vec2 uv = gl_FragCoord.xy / uResolution.xy;
-		vec2 stepSize = uDirection / uResolution.xy * mix(0.75, 3.0, clamp(uStrength / 4.0, 0.0, 1.0));
+		vec2 stepSize = uDirection / uResolution.xy * mix(1.0, 6.0, clamp(uStrength / 4.0, 0.0, 1.0));
 		vec4 color = texture2D(uTexture, uv) * 0.2270270270;
 		color += texture2D(uTexture, uv + stepSize * 1.3846153846) * 0.1581081081;
 		color += texture2D(uTexture, uv - stepSize * 1.3846153846) * 0.1581081081;
@@ -194,8 +194,9 @@ export const compositeFragmentSource = `
 		float cursorHasSurface = step(0.01, cursorSample);
 		float dynamicGate = mix(1.0, cursorHasSurface, dynamic);
 		float depthDelta = abs(surfaceDepth - focalDepth);
+		float focalBand = max(0.025, uDepthOfField.y * 0.28);
 		float mask = step(0.01, sharp.a)
-			* smoothstep(uDepthOfField.y * 0.22, uDepthOfField.y, depthDelta)
+			* smoothstep(focalBand * 0.18, focalBand, depthDelta)
 			* dynamicGate
 			* smoothstep(0.0, 0.45, uStrength);
 		gl_FragColor = vec4(mix(sharp.rgb, blurred.rgb, mask), 1.0);
