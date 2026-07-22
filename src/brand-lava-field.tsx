@@ -292,19 +292,16 @@ const fragmentSource = `
 		));
 	}
 
-	void main() {
-		vec2 uv = (gl_FragCoord.xy / uResolution.xy - 0.5) * vec2(uResolution.x / uResolution.y, 1.0);
-
+	vec3 shadeRay(vec2 uv, float time, out float travelOut, out float hitOut) {
 		vec3 ro = vec3(0.0, 0.0, 4.45);
 		vec3 rd = normalize(vec3(uv * 1.42, -2.05));
-
 		float travel = 0.0;
 		float hit = 0.0;
 		float maxDist = 7.0;
 
-		for (int i = 0; i < 80; i++) {
+		for (int i = 0; i < 54; i++) {
 			vec3 pos = ro + rd * travel;
-			float d = mapField(pos, uTime * uLavaMotion.x);
+			float d = mapField(pos, time * uLavaMotion.x);
 
 			if (d < 0.0025) {
 				hit = 1.0;
@@ -326,11 +323,11 @@ const fragmentSource = `
 
 		vec3 p = ro + rd * travel;
 		if (hit > 0.5) {
-			vec3 n = normalAt(p, uTime * uLavaMotion.x);
+			vec3 n = normalAt(p, time * uLavaMotion.x);
 			float fresnel = pow(1.0 - max(dot(n, -rd), 0.0), 2.0);
 			float light = clamp(dot(n, normalize(vec3(-0.35, 0.7, 0.5))), 0.0, 1.0);
 			float glow = 1.0 - clamp(travel / maxDist, 0.0, 1.0);
-			float wave = sin(p.y * 3.2 + p.x * 1.25 + uTime * 0.75) * 0.5 + 0.5;
+			float wave = sin(p.y * 3.2 + p.x * 1.25 + time * 0.75) * 0.5 + 0.5;
 
 			vec3 lava = mix(uLavaC, uLavaB, smoothstep(0.0, 1.0, wave * 0.22 + light * 0.56));
 			lava = mix(lava, uLavaA, fresnel * 0.12 + glow * 0.06);
@@ -339,17 +336,44 @@ const fragmentSource = `
 			color = lava;
 		}
 
+		travelOut = travel;
+		hitOut = hit;
+		return color;
+	}
+
+	void main() {
+		vec2 uv = (gl_FragCoord.xy / uResolution.xy - 0.5) * vec2(uResolution.x / uResolution.y, 1.0);
+		vec2 screenUv = gl_FragCoord.xy / uResolution.xy;
+		float travel = 0.0;
+		float hit = 0.0;
+		vec3 color = shadeRay(uv, uTime, travel, hit);
+		float blurAmount = smoothstep(0.0, uDepthOfField.y, abs(travel - uDepthOfField.x)) * uDepthOfField.z * uDepthOfField.w;
+		if (blurAmount > 0.01) {
+			vec2 px = vec2(1.0 / uResolution.x, 1.0 / uResolution.y);
+			float radius = blurAmount * 7.5;
+			float t1 = 0.0;
+			float h1 = 0.0;
+			float t2 = 0.0;
+			float h2 = 0.0;
+			float t3 = 0.0;
+			float h3 = 0.0;
+			float t4 = 0.0;
+			float h4 = 0.0;
+			vec2 uvStep = px * radius * vec2(uResolution.x / uResolution.y, 1.0);
+			vec3 blur =
+				shadeRay(uv + vec2(uvStep.x, 0.0), uTime, t1, h1) +
+				shadeRay(uv - vec2(uvStep.x, 0.0), uTime, t2, h2) +
+				shadeRay(uv + vec2(0.0, uvStep.y), uTime, t3, h3) +
+				shadeRay(uv - vec2(0.0, uvStep.y), uTime, t4, h4);
+			color = mix(color, blur * 0.25, blurAmount);
+		}
+
 		for (int i = 0; i < 4; i++) {
 			vec4 highlight = uHighlights[i];
 			float area = smoothstep(highlight.z, 0.0, length(screenUv - highlight.xy)) * highlight.w;
 			color = mix(color, uHighlightColors[i], area);
 			color += uHighlightColors[i] * area * 0.16;
 		}
-
-		float blurAmount = smoothstep(0.0, uDepthOfField.y, abs(travel - uDepthOfField.x)) * uDepthOfField.z * uDepthOfField.w;
-		vec3 defocused = mix(color, uBackground, 0.32);
-		defocused = mix(defocused, uCard, smoothstep(1.2, 0.0, length(uv)) * 0.18);
-		color = mix(color, defocused, blurAmount);
 
 		float vignette = smoothstep(1.35, 0.12, length(uv) * 1.05);
 		float dither = fract((gl_FragCoord.x + gl_FragCoord.y * 1.61803398875) * 0.5) - 0.5;
