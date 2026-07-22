@@ -286,7 +286,7 @@ const fragmentSource = `
 	}
 
 	vec3 normalAt(vec3 p, float t) {
-		vec2 e = vec2(0.004, 0.0);
+		vec2 e = vec2(0.0022, 0.0);
 		return normalize(vec3(
 			mapField(p + e.xyy, t) - mapField(p - e.xyy, t),
 			mapField(p + e.yxy, t) - mapField(p - e.yxy, t),
