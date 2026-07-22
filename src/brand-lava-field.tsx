@@ -310,7 +310,7 @@ function normalizeLavaControls(props: BrandLavaFieldProps) {
 		distribution: normalizeDistribution(props.distribution),
 		speed: Math.max(0, Math.min(3, props.speed ?? 0.72)),
 		gravity: Math.max(-1, Math.min(1, props.gravity ?? 0)),
-		attraction: Math.max(0, Math.min(0.7, props.attraction ?? 0.18)),
+		attraction: Math.max(0, Math.min(0.7, props.attraction ?? 0.08)),
 		mergeSmoothness: Math.max(0.05, Math.min(0.6, props.mergeSmoothness ?? 0.25)),
 		clickPulseStrength: Math.max(0, Math.min(2, props.clickPulse?.strength ?? 0.9)),
 		clickPulseDecay: Math.max(0.72, Math.min(0.98, props.clickPulse?.decay ?? 0.93)),
@@ -372,7 +372,7 @@ function updateBlobStates(
 		const towardPointerX = pointerX - blob.x;
 		const towardPointerY = pointerY - blob.y;
 		const pointerDistance = Math.hypot(towardPointerX, towardPointerY);
-		const pointerPull = Math.max(0, 1 - pointerDistance / 1.65) * controls.attraction * 0.012;
+		const pointerPull = Math.max(0, 1 - pointerDistance / 1.65) * controls.attraction * 0.006;
 
 		blob.vx += (blob.targetX - blob.x) * spring + towardPointerX * pointerPull;
 		blob.vy += (blob.targetY - blob.y) * spring + towardPointerY * pointerPull - controls.gravity * 0.00045;
