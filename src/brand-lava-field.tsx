@@ -288,8 +288,8 @@ const fragmentSource = `
 	}
 
 	vec3 shadeRay(vec2 uv, float time, out float travelOut, out float hitOut) {
-		vec3 ro = vec3(0.0, 0.0, 4.45);
-		vec3 rd = normalize(vec3(uv * 1.42, -2.05));
+		vec3 ro = vec3(uv * 1.42, 4.45);
+		vec3 rd = vec3(0.0, 0.0, -1.0);
 		float travel = 0.0;
 		float hit = 0.0;
 		float maxDist = 7.0;
