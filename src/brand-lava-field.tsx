@@ -19,10 +19,13 @@ export type BrandLavaFieldProps = {
 		color?: string;
 	};
 	connections?: {
-		mode?: "none" | "tendrils";
+		mode?: "none" | "elastic";
 		count?: number;
+		segments?: number;
 		radius?: number;
-		curvature?: number;
+		tension?: number;
+		damping?: number;
+		wobble?: number;
 		blend?: number;
 	};
 	depthOfField?: {
@@ -66,10 +69,20 @@ type BlobState = {
 	radiusSeed: number;
 };
 
-type TendrilLink = {
+type ElasticPoint = {
+	x: number;
+	y: number;
+	z: number;
+	vx: number;
+	vy: number;
+	vz: number;
+};
+
+type ElasticConnection = {
 	from: number;
 	to: number;
 	bend: number;
+	points: ElasticPoint[];
 };
 
 function cssColorToRgb(value: string, fallback: Rgb): Rgb {
@@ -193,9 +206,8 @@ const fragmentSource = `
 	uniform vec4 uLavaShape;
 	uniform vec4 uLavaMotion;
 	uniform vec4 uBlobSpheres[12];
-	uniform vec4 uTendrilStart[6];
-	uniform vec4 uTendrilControl[6];
-	uniform vec4 uTendrilEnd[6];
+	uniform vec4 uConnectionStart[12];
+	uniform vec4 uConnectionEnd[12];
 	uniform vec4 uDepthOfField;
 
 	float smin(float a, float b, float k) {
@@ -226,24 +238,6 @@ const fragmentSource = `
 		return length(pa - ba * h) - r;
 	}
 
-	vec3 quadraticPoint(vec3 a, vec3 b, vec3 c, float t) {
-		float inv = 1.0 - t;
-		return inv * inv * a + 2.0 * inv * t * b + t * t * c;
-	}
-
-	float sdTendril(vec3 p, vec3 a, vec3 b, vec3 c, float r) {
-		float d = 8.0;
-		vec3 previous = a;
-		for (int i = 1; i <= 5; i++) {
-			float t = float(i) / 5.0;
-			vec3 next = quadraticPoint(a, b, c, t);
-			float taper = mix(1.0, 0.58, abs(t - 0.5) * 2.0);
-			d = min(d, sdCapsule(p, previous, next, r * taper));
-			previous = next;
-		}
-		return d;
-	}
-
 	float mapField(vec3 p, float t) {
 		float d = 8.0;
 
@@ -252,12 +246,11 @@ const fragmentSource = `
 			d = smin(d, sdSphere(p, sphere.xyz, sphere.w), uLavaShape.w);
 		}
 
-		for (int i = 0; i < 6; i++) {
-			vec4 start = uTendrilStart[i];
-			vec4 control = uTendrilControl[i];
-			vec4 end = uTendrilEnd[i];
+		for (int i = 0; i < 12; i++) {
+			vec4 start = uConnectionStart[i];
+			vec4 end = uConnectionEnd[i];
 			if (end.w > 0.0) {
-				d = smin(d, sdTendril(p, start.xyz, control.xyz, end.xyz, start.w), control.w);
+				d = smin(d, sdCapsule(p, start.xyz, end.xyz, start.w), end.w);
 			}
 		}
 
@@ -377,10 +370,13 @@ function normalizeLavaControls(props: BrandLavaFieldProps) {
 		clickPulseStrength: Math.max(0, Math.min(2, props.clickPulse?.strength ?? 0.9)),
 		clickPulseDecay: Math.max(0.72, Math.min(0.98, props.clickPulse?.decay ?? 0.93)),
 		connectionMode: props.connections?.mode ?? "none",
-		connectionCount: Math.max(0, Math.min(6, Math.round(props.connections?.count ?? 4))),
-		connectionRadius: Math.max(0.02, Math.min(0.28, props.connections?.radius ?? 0.075)),
-		connectionCurvature: Math.max(0, Math.min(1.2, props.connections?.curvature ?? 0.46)),
-		connectionBlend: Math.max(0.005, Math.min(0.16, props.connections?.blend ?? 0.04)),
+		connectionCount: Math.max(0, Math.min(3, Math.round(props.connections?.count ?? 3))),
+		connectionSegments: Math.max(2, Math.min(4, Math.round(props.connections?.segments ?? 4))),
+		connectionRadius: Math.max(0.01, Math.min(0.18, props.connections?.radius ?? 0.035)),
+		connectionTension: Math.max(0.05, Math.min(1, props.connections?.tension ?? 0.38)),
+		connectionDamping: Math.max(0.7, Math.min(0.99, props.connections?.damping ?? 0.91)),
+		connectionWobble: Math.max(0, Math.min(1, props.connections?.wobble ?? 0.28)),
+		connectionBlend: Math.max(0.002, Math.min(0.12, props.connections?.blend ?? 0.018)),
 		dofEnabled: props.depthOfField?.enabled === true ? 1 : 0,
 		dofFocus: Math.max(0.5, Math.min(7, props.depthOfField?.focus ?? 4.2)),
 		dofRange: Math.max(0.05, Math.min(3, props.depthOfField?.range ?? 1.1)),
@@ -404,15 +400,71 @@ function createBlobStates(): BlobState[] {
 	}));
 }
 
-function createTendrilLinks(): TendrilLink[] {
+function createElasticConnections(): ElasticConnection[] {
 	return [
 		{ from: 1, to: 4, bend: 1 },
 		{ from: 3, to: 7, bend: -1 },
 		{ from: 6, to: 10, bend: 0.75 },
-		{ from: 8, to: 11, bend: -0.65 },
-		{ from: 2, to: 5, bend: 0.55 },
-		{ from: 4, to: 9, bend: -0.85 },
-	];
+	].map((connection) => ({
+		...connection,
+		points: Array.from({ length: 5 }, () => ({ x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 })),
+	}));
+}
+
+function updateElasticConnections(
+	connections: ElasticConnection[],
+	blobs: BlobState[],
+	controls: ReturnType<typeof normalizeLavaControls>,
+	time: number,
+) {
+	for (const [connectionIndex, connection] of connections.entries()) {
+		const from = blobs[connection.from];
+		const to = blobs[connection.to];
+		const enabled =
+			controls.connectionMode === "elastic" &&
+			connectionIndex < controls.connectionCount &&
+			connection.from < controls.blobCount &&
+			connection.to < controls.blobCount;
+		const dx = to.x - from.x;
+		const dy = to.y - from.y;
+		const dz = to.z - from.z;
+		const distance = Math.max(0.001, Math.hypot(dx, dy));
+		const normalX = -dy / distance;
+		const normalY = dx / distance;
+
+		for (const [pointIndex, point] of connection.points.entries()) {
+			const t = pointIndex / (connection.points.length - 1);
+			const endpoint = pointIndex === 0 || pointIndex === connection.points.length - 1;
+			const curve =
+				Math.sin(t * Math.PI) * connection.bend * controls.connectionWobble * Math.min(0.34, distance * 0.2);
+			const phase = time * (0.72 + connectionIndex * 0.11) + pointIndex * 1.7 + connectionIndex;
+			const wobble = Math.sin(phase) * controls.connectionWobble * 0.035 * Math.sin(t * Math.PI);
+			const targetX = from.x + dx * t + normalX * (curve + wobble);
+			const targetY =
+				from.y + dy * t + normalY * (curve + wobble) + Math.sin(phase * 0.73) * 0.025 * Math.sin(t * Math.PI);
+			const targetZ = from.z + dz * t + Math.cos(phase * 0.67) * 0.035 * Math.sin(t * Math.PI);
+
+			if (endpoint || !enabled) {
+				point.x = targetX;
+				point.y = targetY;
+				point.z = targetZ;
+				point.vx = 0;
+				point.vy = 0;
+				point.vz = 0;
+				continue;
+			}
+
+			point.vx += (targetX - point.x) * controls.connectionTension * 0.018;
+			point.vy += (targetY - point.y) * controls.connectionTension * 0.018 - controls.gravity * 0.00025;
+			point.vz += (targetZ - point.z) * controls.connectionTension * 0.018;
+			point.vx *= controls.connectionDamping;
+			point.vy *= controls.connectionDamping;
+			point.vz *= controls.connectionDamping;
+			point.x += point.vx;
+			point.y += point.vy;
+			point.z += point.vz;
+		}
+	}
 }
 
 function updateBlobStates(
@@ -584,9 +636,8 @@ export function BrandLavaField({
 		let lavaShapeLocation: WebGLUniformLocation | null = null;
 		let lavaMotionLocation: WebGLUniformLocation | null = null;
 		let blobSphereLocations: (WebGLUniformLocation | null)[] = [];
-		let tendrilStartLocations: (WebGLUniformLocation | null)[] = [];
-		let tendrilControlLocations: (WebGLUniformLocation | null)[] = [];
-		let tendrilEndLocations: (WebGLUniformLocation | null)[] = [];
+		let connectionStartLocations: (WebGLUniformLocation | null)[] = [];
+		let connectionEndLocations: (WebGLUniformLocation | null)[] = [];
 		let depthOfFieldLocation: WebGLUniformLocation | null = null;
 
 		try {
@@ -616,13 +667,12 @@ export function BrandLavaField({
 			blobSphereLocations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) =>
 				gl.getUniformLocation(program, `uBlobSpheres[${index}]`),
 			);
-			tendrilStartLocations = [0, 1, 2, 3, 4, 5].map((index) =>
-				gl.getUniformLocation(program, `uTendrilStart[${index}]`),
+			connectionStartLocations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) =>
+				gl.getUniformLocation(program, `uConnectionStart[${index}]`),
 			);
-			tendrilControlLocations = [0, 1, 2, 3, 4, 5].map((index) =>
-				gl.getUniformLocation(program, `uTendrilControl[${index}]`),
+			connectionEndLocations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) =>
+				gl.getUniformLocation(program, `uConnectionEnd[${index}]`),
 			);
-			tendrilEndLocations = [0, 1, 2, 3, 4, 5].map((index) => gl.getUniformLocation(program, `uTendrilEnd[${index}]`));
 			depthOfFieldLocation = gl.getUniformLocation(program, "uDepthOfField");
 
 			if (
@@ -640,9 +690,8 @@ export function BrandLavaField({
 				lavaMotionLocation === null ||
 				depthOfFieldLocation === null ||
 				blobSphereLocations.some((location) => location === null) ||
-				tendrilStartLocations.some((location) => location === null) ||
-				tendrilControlLocations.some((location) => location === null) ||
-				tendrilEndLocations.some((location) => location === null) ||
+				connectionStartLocations.some((location) => location === null) ||
+				connectionEndLocations.some((location) => location === null) ||
 				highlightLocations.some((location) => location === null) ||
 				highlightColorLocations.some((location) => location === null) ||
 				positionLocation < 0
@@ -669,7 +718,7 @@ export function BrandLavaField({
 		const mouse = { x: 0.5, y: 0.5 };
 		const targetMouse = { x: 0.5, y: 0.5 };
 		const blobs = createBlobStates();
-		const tendrils = createTendrilLinks();
+		const elasticConnections = createElasticConnections();
 		const onMove = (event: PointerEvent) => {
 			const rect = root.getBoundingClientRect();
 			targetMouse.x = (event.clientX - rect.left) / rect.width;
@@ -734,6 +783,7 @@ export function BrandLavaField({
 			gl.uniform3f(lavaCLocation, themeColors.lavaC[0], themeColors.lavaC[1], themeColors.lavaC[2]);
 			const lavaControls = lavaControlsRef.current;
 			updateBlobStates(blobs, lavaControls, time * 0.001, mouse);
+			updateElasticConnections(elasticConnections, blobs, lavaControls, time * 0.001);
 			gl.uniform4f(
 				lavaShapeLocation,
 				lavaControls.blobCount,
@@ -762,38 +812,26 @@ export function BrandLavaField({
 					: 0;
 				gl.uniform4f(location, blob.x, blob.y, blob.z, radius);
 			}
-			for (const [index, location] of tendrilStartLocations.entries()) {
-				const controlLocation = tendrilControlLocations[index];
-				const endLocation = tendrilEndLocations[index];
-				if (!location || !controlLocation || !endLocation) {
+			for (const [index, location] of connectionStartLocations.entries()) {
+				const endLocation = connectionEndLocations[index];
+				if (!location || !endLocation) {
 					continue;
 				}
-				const tendril = tendrils[index];
+				const connection = elasticConnections[Math.floor(index / 4)];
+				const segmentIndex = index % 4;
 				const enabled =
-					lavaControls.connectionMode === "tendrils" &&
-					index < lavaControls.connectionCount &&
-					tendril.from < lavaControls.blobCount &&
-					tendril.to < lavaControls.blobCount
+					connection &&
+					lavaControls.connectionMode === "elastic" &&
+					Math.floor(index / 4) < lavaControls.connectionCount &&
+					segmentIndex < lavaControls.connectionSegments
 						? 1
 						: 0;
-				const from = blobs[tendril.from];
-				const to = blobs[tendril.to];
-				const dx = to.x - from.x;
-				const dy = to.y - from.y;
-				const distance = Math.max(0.001, Math.hypot(dx, dy));
-				const normalX = -dy / distance;
-				const normalY = dx / distance;
-				const curve = lavaControls.connectionCurvature * tendril.bend * Math.min(0.34, distance * 0.22);
-				const radius = lavaControls.connectionRadius * lavaControls.blobSize * enabled;
-				gl.uniform4f(location, from.x + dx * 0.18, from.y + dy * 0.18, from.z, radius);
-				gl.uniform4f(
-					controlLocation,
-					(from.x + to.x) * 0.5 + normalX * curve,
-					(from.y + to.y) * 0.5 + normalY * curve,
-					(from.z + to.z) * 0.5,
-					lavaControls.connectionBlend,
-				);
-				gl.uniform4f(endLocation, to.x - dx * 0.18, to.y - dy * 0.18, to.z, enabled);
+				const start = connection?.points[segmentIndex];
+				const end = connection?.points[segmentIndex + 1];
+				const taper = Math.sin(((segmentIndex + 0.5) / Math.max(1, lavaControls.connectionSegments)) * Math.PI);
+				const radius = lavaControls.connectionRadius * lavaControls.blobSize * (0.45 + taper * 0.55) * enabled;
+				gl.uniform4f(location, start?.x ?? 0, start?.y ?? 0, start?.z ?? 0, radius);
+				gl.uniform4f(endLocation, end?.x ?? 0, end?.y ?? 0, end?.z ?? 0, lavaControls.connectionBlend * enabled);
 			}
 			gl.uniform4f(
 				cursorLightLocation,
