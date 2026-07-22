@@ -39,6 +39,18 @@ type ThemeColors = {
 	lavaC: Rgb;
 };
 
+type BlobState = {
+	x: number;
+	y: number;
+	z: number;
+	vx: number;
+	vy: number;
+	targetX: number;
+	targetY: number;
+	phase: number;
+	radiusSeed: number;
+};
+
 function cssColorToRgb(value: string, fallback: Rgb): Rgb {
 	const color = value.trim();
 	const cssVariable = color.match(/^var\(\s*(--[\w-]+)/);
@@ -159,14 +171,11 @@ const fragmentSource = `
 	uniform vec3 uCursorLightColor;
 	uniform vec4 uLavaShape;
 	uniform vec4 uLavaMotion;
+	uniform vec4 uBlobSpheres[12];
 
 	float smin(float a, float b, float k) {
 		float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
 		return mix(b, a, h) - k * h * (1.0 - h);
-	}
-
-	float hash(float n) {
-		return fract(sin(n * 127.1) * 43758.5453123);
 	}
 
 	vec3 rotateX(vec3 p, float a) {
@@ -185,41 +194,12 @@ const fragmentSource = `
 		return length(p - c) - r;
 	}
 
-	vec3 blobCenter(float index, float t) {
-		float phase = index * 1.61803 + t * 0.18;
-		float distribution = uLavaShape.z;
-		float drift = (0.28 + hash(index) * 0.24) * mix(0.72, 1.34, distribution);
-		float level = -1.05 + index * mix(0.24, 0.33, distribution);
-		level -= uLavaMotion.z * (0.1 + hash(index + 4.0) * 0.24);
-		vec2 center = vec2(
-			cos(phase + 0.7 * sin(t * 0.38 + index * 1.1)) * drift,
-			level + sin(phase * 0.9 + t * 0.42) * mix(0.08, 0.16, distribution)
-		);
-		vec2 pulseOrigin = (uCursorLight.xy - 0.5) * vec2(1.1, 2.0);
-		vec2 pulseVector = center - pulseOrigin;
-		float pulseDistance = length(pulseVector);
-		float pulseFalloff = smoothstep(1.35, 0.0, pulseDistance);
-		center += normalize(pulseVector + vec2(0.001)) * uLavaMotion.y * pulseFalloff * (0.2 + hash(index + 7.0) * 0.34);
-		return vec3(
-			center.x,
-			center.y,
-			cos(phase * 0.67 + t * 0.5) * mix(0.18, 0.34, distribution)
-		);
-	}
-
 	float mapField(vec3 p, float t) {
 		float d = 8.0;
 
 		for (int i = 0; i < 12; i++) {
-			float fi = float(i);
-			float active = 1.0 - step(uLavaShape.x, fi);
-			vec3 c = blobCenter(fi, t);
-			vec2 pointer = (uMouse - 0.5) * vec2(1.1, 2.0);
-			vec2 towardPointer = pointer - c.xy;
-			float pointerPull = smoothstep(1.65, 0.0, length(towardPointer));
-			c.xy += towardPointer * pointerPull * uLavaMotion.w;
-			float radius = (0.19 + 0.08 * hash(fi) + 0.035 * sin(t * 0.36 + fi)) * uLavaShape.y * active;
-			d = smin(d, sdSphere(p, c, radius), uLavaShape.w);
+			vec4 sphere = uBlobSpheres[i];
+			d = smin(d, sdSphere(p, sphere.xyz, sphere.w), uLavaShape.w);
 		}
 
 		float base = sdSphere(p, vec3(-0.12, -1.35 - uLavaMotion.z * 0.08, 0.0), 0.34 * uLavaShape.y);
@@ -337,6 +317,87 @@ function normalizeLavaControls(props: BrandLavaFieldProps) {
 	};
 }
 
+function createBlobStates(): BlobState[] {
+	return Array.from({ length: 12 }, (_, index) => ({
+		x: 0,
+		y: -1.05 + index * 0.29,
+		z: 0,
+		vx: 0,
+		vy: 0,
+		targetX: 0,
+		targetY: -1.05 + index * 0.29,
+		phase: index * 1.61803,
+		radiusSeed: Math.sin(index * 127.1) * 0.5 + 0.5,
+	}));
+}
+
+function updateBlobStates(
+	blobs: BlobState[],
+	controls: ReturnType<typeof normalizeLavaControls>,
+	time: number,
+	mouse: { x: number; y: number },
+) {
+	const pointerX = (mouse.x - 0.5) * 1.1;
+	const pointerY = (mouse.y - 0.5) * 2;
+	const distribution = controls.distribution;
+	const activeCount = controls.blobCount;
+	const spacing = 0.24 + distribution * 0.09;
+	const damping = Math.min(0.97, controls.clickPulseDecay + 0.04 - Math.min(0.08, controls.speed * 0.02));
+	const spring = 0.004 + controls.speed * 0.004;
+
+	for (const [index, blob] of blobs.entries()) {
+		if (index >= activeCount) {
+			blob.x = 0;
+			blob.y = 0;
+			blob.vx = 0;
+			blob.vy = 0;
+			continue;
+		}
+
+		const phase = blob.phase + time * 0.18 * controls.speed;
+		const drift = (0.28 + blob.radiusSeed * 0.24) * (0.72 + distribution * 0.62);
+		const baseY = -1.05 + index * spacing - controls.gravity * (0.1 + blob.radiusSeed * 0.24);
+		blob.targetX = Math.cos(phase + 0.7 * Math.sin(time * 0.38 * controls.speed + index * 1.1)) * drift;
+		blob.targetY = baseY + Math.sin(phase * 0.9 + time * 0.42 * controls.speed) * (0.08 + distribution * 0.08);
+		blob.z = Math.cos(phase * 0.67 + time * 0.5 * controls.speed) * (0.18 + distribution * 0.16);
+
+		const towardPointerX = pointerX - blob.x;
+		const towardPointerY = pointerY - blob.y;
+		const pointerDistance = Math.hypot(towardPointerX, towardPointerY);
+		const pointerPull = Math.max(0, 1 - pointerDistance / 1.65) * controls.attraction * 0.012;
+
+		blob.vx += (blob.targetX - blob.x) * spring + towardPointerX * pointerPull;
+		blob.vy += (blob.targetY - blob.y) * spring + towardPointerY * pointerPull - controls.gravity * 0.0009;
+		blob.vx *= damping;
+		blob.vy *= damping;
+		blob.x += blob.vx;
+		blob.y += blob.vy;
+	}
+}
+
+function pushBlobPulse(
+	blobs: BlobState[],
+	controls: ReturnType<typeof normalizeLavaControls>,
+	mouse: { x: number; y: number },
+) {
+	const originX = (mouse.x - 0.5) * 1.1;
+	const originY = (mouse.y - 0.5) * 2;
+
+	for (const [index, blob] of blobs.entries()) {
+		if (index >= controls.blobCount) {
+			continue;
+		}
+
+		const dx = blob.x - originX;
+		const dy = blob.y - originY;
+		const distance = Math.max(0.001, Math.hypot(dx, dy));
+		const falloff = Math.max(0, 1 - distance / 1.35);
+		const impulse = controls.clickPulseStrength * falloff * falloff * 0.04;
+		blob.vx += (dx / distance) * impulse;
+		blob.vy += (dy / distance) * impulse;
+	}
+}
+
 export function BrandLavaField({
 	highlights,
 	cursorLight,
@@ -422,6 +483,7 @@ export function BrandLavaField({
 		let cursorLightColorLocation: WebGLUniformLocation | null = null;
 		let lavaShapeLocation: WebGLUniformLocation | null = null;
 		let lavaMotionLocation: WebGLUniformLocation | null = null;
+		let blobSphereLocations: (WebGLUniformLocation | null)[] = [];
 
 		try {
 			program = createProgram(gl, vertexSource, fragmentSource);
@@ -447,6 +509,9 @@ export function BrandLavaField({
 			cursorLightColorLocation = gl.getUniformLocation(program, "uCursorLightColor");
 			lavaShapeLocation = gl.getUniformLocation(program, "uLavaShape");
 			lavaMotionLocation = gl.getUniformLocation(program, "uLavaMotion");
+			blobSphereLocations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) =>
+				gl.getUniformLocation(program, `uBlobSpheres[${index}]`),
+			);
 
 			if (
 				resolutionLocation === null ||
@@ -461,6 +526,7 @@ export function BrandLavaField({
 				cursorLightColorLocation === null ||
 				lavaShapeLocation === null ||
 				lavaMotionLocation === null ||
+				blobSphereLocations.some((location) => location === null) ||
 				highlightLocations.some((location) => location === null) ||
 				highlightColorLocations.some((location) => location === null) ||
 				positionLocation < 0
@@ -486,14 +552,14 @@ export function BrandLavaField({
 
 		const mouse = { x: 0.5, y: 0.5 };
 		const targetMouse = { x: 0.5, y: 0.5 };
-		let pulse = 0;
+		const blobs = createBlobStates();
 		const onMove = (event: PointerEvent) => {
 			const rect = root.getBoundingClientRect();
 			targetMouse.x = (event.clientX - rect.left) / rect.width;
 			targetMouse.y = 1 - (event.clientY - rect.top) / rect.height;
 		};
 		const onDown = () => {
-			pulse = Math.max(pulse, lavaControlsRef.current.clickPulseStrength);
+			pushBlobPulse(blobs, lavaControlsRef.current, mouse);
 		};
 		const onLeave = () => {
 			targetMouse.x = 0.5;
@@ -545,7 +611,7 @@ export function BrandLavaField({
 			gl.uniform3f(lavaBLocation, themeColors.lavaB[0], themeColors.lavaB[1], themeColors.lavaB[2]);
 			gl.uniform3f(lavaCLocation, themeColors.lavaC[0], themeColors.lavaC[1], themeColors.lavaC[2]);
 			const lavaControls = lavaControlsRef.current;
-			pulse *= lavaControls.clickPulseDecay;
+			updateBlobStates(blobs, lavaControls, time * 0.001, mouse);
 			gl.uniform4f(
 				lavaShapeLocation,
 				lavaControls.blobCount,
@@ -553,7 +619,19 @@ export function BrandLavaField({
 				lavaControls.distribution,
 				lavaControls.mergeSmoothness,
 			);
-			gl.uniform4f(lavaMotionLocation, lavaControls.speed, pulse, lavaControls.gravity, lavaControls.attraction);
+			gl.uniform4f(lavaMotionLocation, lavaControls.speed, 0, lavaControls.gravity, lavaControls.attraction);
+			for (const [index, location] of blobSphereLocations.entries()) {
+				if (!location) {
+					continue;
+				}
+				const blob = blobs[index];
+				const active = index < lavaControls.blobCount;
+				const radius = active
+					? (0.19 + 0.08 * blob.radiusSeed + 0.035 * Math.sin(time * 0.00036 * lavaControls.speed + index)) *
+						lavaControls.blobSize
+					: 0;
+				gl.uniform4f(location, blob.x, blob.y, blob.z, radius);
+			}
 			gl.uniform4f(
 				cursorLightLocation,
 				mouse.x,
