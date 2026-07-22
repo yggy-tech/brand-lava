@@ -70,6 +70,9 @@ function normalizeLavaControls(props: BrandLavaFieldProps) {
 		boundsZ: props.bounds?.z ?? ([-0.36, 0.36] as const),
 		zDepthScale: Math.max(0.2, Math.min(4, ((props.bounds?.z?.[1] ?? 0.36) - (props.bounds?.z?.[0] ?? -0.36)) / 0.72)),
 		boundsBounce: Math.max(0, Math.min(1, props.bounds?.bounce ?? 0.42)),
+		staticTop: props.staticNodes?.top === true,
+		staticCenter: props.staticNodes?.center === true,
+		staticBottom: props.staticNodes?.bottom === true,
 	};
 }
 
@@ -144,6 +147,19 @@ function createSatelliteBlobs(): SatelliteBlob[] {
 		{ from: 6, to: 10, phase: 2.6, offset: 0.75 },
 		{ from: 8, to: 11, phase: 4.1, offset: -0.65 },
 	];
+}
+
+function staticNodeY(index: number, controls: ReturnType<typeof normalizeLavaControls>): number | null {
+	if (controls.staticBottom && index === 0) {
+		return -1.35;
+	}
+	if (controls.staticCenter && index === Math.floor((controls.blobCount - 1) / 2)) {
+		return 0;
+	}
+	if (controls.staticTop && index === controls.blobCount - 1) {
+		return 1.48;
+	}
+	return null;
 }
 
 function updateElasticConnections(
@@ -225,6 +241,20 @@ function updateBlobStates(
 			continue;
 		}
 
+		const anchorY = staticNodeY(index, controls);
+		if (anchorY !== null) {
+			blob.x = 0;
+			blob.y = anchorY;
+			blob.z = 0;
+			blob.vx = 0;
+			blob.vy = 0;
+			blob.targetX = 0;
+			blob.targetY = anchorY;
+			blob.offsetX = 0;
+			blob.offsetY = 0;
+			continue;
+		}
+
 		const phase = blob.phase + time * 0.18 * controls.speed;
 		const drift = (0.28 + blob.radiusSeed * 0.24) * (0.72 + distribution * 0.62);
 		const baseY =
@@ -279,7 +309,7 @@ function pushBlobPulse(
 	const originY = (mouse.y - 0.5) * 2;
 
 	for (const [index, blob] of blobs.entries()) {
-		if (index >= controls.blobCount) {
+		if (index >= controls.blobCount || staticNodeY(index, controls) !== null) {
 			continue;
 		}
 
@@ -306,6 +336,7 @@ export function BrandLavaField({
 	satellites,
 	connections,
 	bounds,
+	staticNodes,
 	blobCount,
 	blobSize,
 	blobSizeRange,
@@ -334,6 +365,7 @@ export function BrandLavaField({
 			satellites,
 			connections,
 			bounds,
+			staticNodes,
 		}),
 	);
 	const cursorLightRef = useRef({
@@ -357,6 +389,7 @@ export function BrandLavaField({
 		satellites,
 		connections,
 		bounds,
+		staticNodes,
 	});
 	cursorLightRef.current = {
 		radius: Math.max(0.01, Math.min(1, cursorLight?.radius ?? 0.34)),

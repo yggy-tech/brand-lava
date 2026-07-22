@@ -43,6 +43,11 @@ export type BrandLavaFieldProps = {
 		z?: readonly [number, number];
 		bounce?: number;
 	};
+	staticNodes?: {
+		top?: boolean;
+		center?: boolean;
+		bottom?: boolean;
+	};
 	blobCount?: number;
 	blobSize?: number;
 	blobSizeRange?: readonly [number, number];
