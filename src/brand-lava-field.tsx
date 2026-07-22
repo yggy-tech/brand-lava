@@ -64,6 +64,11 @@ function createShader(gl: WebGLRenderingContext, source: string, type: number): 
 	return shader;
 }
 
+function activateProgram(gl: WebGLRenderingContext, program: WebGLProgram) {
+	const useWebGlProgram = Reflect.get(gl, "useProgram") as WebGLRenderingContext["useProgram"];
+	useWebGlProgram.call(gl, program);
+}
+
 function createProgram(gl: WebGLRenderingContext, vertexSource: string, fragmentSource: string): WebGLProgram {
 	const vertexShader = createShader(gl, vertexSource, gl.VERTEX_SHADER);
 	const fragmentShader = createShader(gl, fragmentSource, gl.FRAGMENT_SHADER);
@@ -294,7 +299,7 @@ export function BrandLavaField() {
 			gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
 			gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
 
-			gl["useProgram"](program);
+			activateProgram(gl, program);
 			gl.enableVertexAttribArray(positionLocation);
 			gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 		} catch {
@@ -348,7 +353,7 @@ export function BrandLavaField() {
 				return;
 			}
 
-			gl["useProgram"](program);
+			activateProgram(gl, program);
 			mouse.x += (targetMouse.x - mouse.x) * 0.026;
 			mouse.y += (targetMouse.y - mouse.y) * 0.026;
 			gl.uniform2f(resolutionLocation, canvas.width, canvas.height);
