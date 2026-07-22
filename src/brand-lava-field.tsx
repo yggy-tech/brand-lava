@@ -222,11 +222,9 @@ const fragmentSource = `
 			}
 		}
 
-		float combinedDistance = nearest + secondNearest;
-		float longReach = smoothstep(uLavaShape.w * 2.4, 0.0, combinedDistance);
-		float strandCore = 1.0 - smoothstep(0.018, 0.09, abs(nearest - secondNearest));
-		float outsideSurface = smoothstep(0.0, uLavaShape.w * 0.34, nearest);
-		return longReach * strandCore * outsideSurface;
+		float bridge = smoothstep(uLavaShape.w * 0.72, 0.0, nearest + secondNearest);
+		float outsideSurface = smoothstep(0.0, uLavaShape.w * 0.38, nearest);
+		return bridge * outsideSurface;
 	}
 
 	vec3 normalAt(vec3 p, float t) {
