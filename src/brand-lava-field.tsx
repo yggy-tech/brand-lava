@@ -54,6 +54,7 @@ export type BrandLavaFieldProps = {
 	};
 	blobCount?: number;
 	blobSize?: number;
+	blobSizeRange?: readonly [number, number];
 	distribution?: BrandLavaDistribution;
 	speed?: number;
 	gravity?: number;
@@ -387,6 +388,7 @@ function normalizeLavaControls(props: BrandLavaFieldProps) {
 	return {
 		blobCount: Math.max(1, Math.min(12, Math.round(props.blobCount ?? 12))),
 		blobSize: Math.max(0.45, Math.min(1.8, props.blobSize ?? 1)),
+		blobSizeRange: props.blobSizeRange ?? ([0.19, 0.27] as const),
 		distribution: normalizeDistribution(props.distribution),
 		speed: Math.max(0, Math.min(3, props.speed ?? 0.72)),
 		gravity: Math.max(-1, Math.min(1, props.gravity ?? 0)),
@@ -420,6 +422,23 @@ function normalizeLavaControls(props: BrandLavaFieldProps) {
 		zDepthScale: Math.max(0.2, Math.min(4, ((props.bounds?.z?.[1] ?? 0.36) - (props.bounds?.z?.[0] ?? -0.36)) / 0.72)),
 		boundsBounce: Math.max(0, Math.min(1, props.bounds?.bounce ?? 0.42)),
 	};
+}
+
+function blobRadius(
+	index: number,
+	seed: number,
+	controls: ReturnType<typeof normalizeLavaControls>,
+	time: number,
+): number {
+	const rangeMin = Math.max(0.04, Math.min(0.8, controls.blobSizeRange[0]));
+	const rangeMax = Math.max(rangeMin, Math.min(0.9, controls.blobSizeRange[1]));
+	const base =
+		index === 0
+			? Math.max(rangeMax, 0.34)
+			: index === 11
+				? Math.max(rangeMin, Math.min(rangeMax, 0.29))
+				: rangeMin + (rangeMax - rangeMin) * seed;
+	return (base + 0.035 * Math.sin(time * 0.00036 * controls.speed + index)) * controls.blobSize;
 }
 
 function clampRange(value: number, range: readonly [number, number]): number {
@@ -641,6 +660,7 @@ export function BrandLavaField({
 	bounds,
 	blobCount,
 	blobSize,
+	blobSizeRange,
 	distribution,
 	speed,
 	gravity,
@@ -655,6 +675,7 @@ export function BrandLavaField({
 		normalizeLavaControls({
 			blobCount,
 			blobSize,
+			blobSizeRange,
 			distribution,
 			speed,
 			gravity,
@@ -678,6 +699,7 @@ export function BrandLavaField({
 	lavaControlsRef.current = normalizeLavaControls({
 		blobCount,
 		blobSize,
+		blobSizeRange,
 		distribution,
 		speed,
 		gravity,
@@ -928,15 +950,14 @@ export function BrandLavaField({
 						(from.z + to.z) * 0.5 + Math.cos(time * 0.00031 * lavaControls.speed + satellite.phase) * 0.08,
 						lavaControls.boundsZ,
 					);
-					const baseRadius = Math.min(0.19 + 0.08 * from.radiusSeed, 0.19 + 0.08 * to.radiusSeed);
-					gl.uniform4f(location, x, y, z, baseRadius * lavaControls.satelliteSize * lavaControls.blobSize);
+					const baseRadius = Math.min(
+						blobRadius(satellite.from, from.radiusSeed, lavaControls, time),
+						blobRadius(satellite.to, to.radiusSeed, lavaControls, time),
+					);
+					gl.uniform4f(location, x, y, z, baseRadius * lavaControls.satelliteSize);
 					continue;
 				}
-				const radius = primaryActive
-					? ((index === 0 ? 0.34 : index === 11 ? 0.29 : 0.19 + 0.08 * blob.radiusSeed) +
-							0.035 * Math.sin(time * 0.00036 * lavaControls.speed + index)) *
-						lavaControls.blobSize
-					: 0;
+				const radius = primaryActive ? blobRadius(index, blob.radiusSeed, lavaControls, time) : 0;
 				gl.uniform4f(location, blob.x, blob.y, blob.z, radius);
 			}
 			for (const [index, location] of connectionStartLocations.entries()) {
