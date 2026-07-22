@@ -269,7 +269,9 @@ const fragmentSource = `
 
 		for (int i = 0; i < 12; i++) {
 			vec4 sphere = uBlobSpheres[i];
-			d = smin(d, sdSphere(p, sphere.xyz, sphere.w), uLavaShape.w);
+			if (sphere.w > 0.001) {
+				d = smin(d, sdSphere(p, sphere.xyz, sphere.w), uLavaShape.w);
+			}
 		}
 
 		for (int i = 0; i < 12; i++) {
@@ -299,16 +301,16 @@ const fragmentSource = `
 		float hit = 0.0;
 		float maxDist = 7.0;
 
-		for (int i = 0; i < 54; i++) {
+		for (int i = 0; i < 68; i++) {
 			vec3 pos = ro + rd * travel;
 			float d = mapField(pos, time * uLavaMotion.x);
 
-			if (d < 0.0025) {
+			if (d < 0.0032) {
 				hit = 1.0;
 				break;
 			}
 
-			travel += max(0.006, d * 0.72);
+			travel += max(0.004, d * 0.52);
 			if (travel > maxDist) {
 				break;
 			}
