@@ -417,7 +417,7 @@ function normalizeLavaControls(props: BrandLavaFieldProps) {
 		dofRange: Math.max(0.05, Math.min(3, props.depthOfField?.range ?? 1.1)),
 		dofStrength: Math.max(0, Math.min(1, props.depthOfField?.strength ?? 0.34)),
 		boundsX: props.bounds?.x ?? ([-0.82, 0.82] as const),
-		boundsY: props.bounds?.y ?? ([-1.52, 1.58] as const),
+		boundsY: props.bounds?.y ?? ([-1.58, 1.86] as const),
 		boundsZ: props.bounds?.z ?? ([-0.36, 0.36] as const),
 		zDepthScale: Math.max(0.2, Math.min(4, ((props.bounds?.z?.[1] ?? 0.36) - (props.bounds?.z?.[0] ?? -0.36)) / 0.72)),
 		boundsBounce: Math.max(0, Math.min(1, props.bounds?.bounce ?? 0.42)),
