@@ -34,7 +34,9 @@ export const fragmentSource = `
 	}
 
 	float sdSphere(vec3 p, vec3 c, float r) {
-		return length(p - c) - r;
+		vec3 offset = p - c;
+		offset.z *= 0.42;
+		return length(offset) - r;
 	}
 
 	float sdCapsule(vec3 p, vec3 a, vec3 b, float r) {
@@ -129,13 +131,6 @@ export const fragmentSource = `
 		float travel = 0.0;
 		float hit = 0.0;
 		vec3 color = shadeRay(uv, uTime, travel, hit);
-		float cursorBlobGate = hit * smoothstep(uCursorLight.z, 0.0, length(screenUv - uMouse));
-		float blurAmount = smoothstep(
-			uDepthOfField.y * 0.18,
-			uDepthOfField.y,
-			abs(travel - uDepthOfField.x)
-		) * uDepthOfField.w * cursorBlobGate;
-
 		for (int i = 0; i < 4; i++) {
 			vec4 highlight = uHighlights[i];
 			float area = smoothstep(highlight.z, 0.0, length(screenUv - highlight.xy)) * highlight.w;
@@ -146,7 +141,8 @@ export const fragmentSource = `
 		float vignette = smoothstep(1.35, 0.12, length(uv) * 1.05);
 		float dither = fract((gl_FragCoord.x + gl_FragCoord.y * 1.61803398875) * 0.5) - 0.5;
 		color += dither / 510.0;
-		float outputAlpha = mix(1.0, blurAmount, step(0.5, uDepthOfField.w));
+		float encodedDepth = hit * (0.02 + clamp(travel / 7.0, 0.0, 1.0) * 0.98);
+		float outputAlpha = mix(1.0, encodedDepth, step(0.5, uDepthOfField.w));
 		gl_FragColor = vec4(color * mix(0.86, 1.04, vignette), outputAlpha);
 	}
 `;
@@ -171,7 +167,7 @@ export const blurFragmentSource = `
 		color += texture2D(uTexture, uv - stepSize * 5.1764705882) * 0.0117567568;
 		color += texture2D(uTexture, uv + stepSize * 7.1176470588) * 0.0054864865;
 		color += texture2D(uTexture, uv - stepSize * 7.1176470588) * 0.0054864865;
-		color /= 0.6420270272;
+		color /= 0.648;
 		gl_FragColor = color;
 	}
 `;
@@ -182,19 +178,26 @@ export const compositeFragmentSource = `
 	uniform sampler2D uSharpTexture;
 	uniform sampler2D uBlurTexture;
 	uniform vec2 uResolution;
+	uniform vec2 uMouse;
+	uniform vec4 uDepthOfField;
 	uniform float uStrength;
 
 	void main() {
 		vec2 uv = gl_FragCoord.xy / uResolution.xy;
-		vec2 texel = 1.0 / uResolution.xy;
 		vec4 sharp = texture2D(uSharpTexture, uv);
 		vec4 blurred = texture2D(uBlurTexture, uv);
-		float nearbyMask = max(
-			max(texture2D(uSharpTexture, uv + vec2(texel.x * 2.0, 0.0)).a, texture2D(uSharpTexture, uv - vec2(texel.x * 2.0, 0.0)).a),
-			max(texture2D(uSharpTexture, uv + vec2(0.0, texel.y * 2.0)).a, texture2D(uSharpTexture, uv - vec2(0.0, texel.y * 2.0)).a)
-		);
-		float focusMask = max(sharp.a, nearbyMask * 0.72);
-		float mask = smoothstep(0.04, 0.72, focusMask) * smoothstep(0.0, 0.45, uStrength);
+		float surfaceDepth = max(0.0, (sharp.a - 0.02) / 0.98) * 7.0;
+		float cursorSample = texture2D(uSharpTexture, uMouse).a;
+		float cursorDepth = max(0.0, (cursorSample - 0.02) / 0.98) * 7.0;
+		float dynamic = uDepthOfField.w;
+		float focalDepth = mix(uDepthOfField.x, cursorDepth, dynamic);
+		float cursorHasSurface = step(0.01, cursorSample);
+		float dynamicGate = mix(1.0, cursorHasSurface, dynamic);
+		float depthDelta = abs(surfaceDepth - focalDepth);
+		float mask = step(0.01, sharp.a)
+			* smoothstep(uDepthOfField.y * 0.22, uDepthOfField.y, depthDelta)
+			* dynamicGate
+			* smoothstep(0.0, 0.45, uStrength);
 		gl_FragColor = vec4(mix(sharp.rgb, blurred.rgb, mask), 1.0);
 	}
 `;

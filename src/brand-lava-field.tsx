@@ -71,6 +71,7 @@ function normalizeLavaControls(props: BrandLavaFieldProps) {
 		zDepthScale: Math.max(0.2, Math.min(4, ((props.bounds?.z?.[1] ?? 0.36) - (props.bounds?.z?.[0] ?? -0.36)) / 0.72)),
 		boundsBounce: Math.max(0, Math.min(1, props.bounds?.bounce ?? 0.42)),
 		dofEnabled: props.depthOfField?.enabled === true ? 1 : 0,
+		dofDynamic: props.depthOfField?.dynamic === true ? 1 : 0,
 		dofFocus: Math.max(0.5, Math.min(7, props.depthOfField?.focus ?? 4.2)),
 		dofRange: Math.max(0.05, Math.min(3, props.depthOfField?.range ?? 1.1)),
 		dofStrength: Math.max(0, Math.min(4, props.depthOfField?.strength ?? 0.72)),
@@ -421,6 +422,8 @@ export function BrandLavaField({
 		let compositeSharpTextureLocation: WebGLUniformLocation | null = null;
 		let compositeBlurTextureLocation: WebGLUniformLocation | null = null;
 		let compositeResolutionLocation: WebGLUniformLocation | null = null;
+		let compositeMouseLocation: WebGLUniformLocation | null = null;
+		let compositeDepthOfFieldLocation: WebGLUniformLocation | null = null;
 		let compositeStrengthLocation: WebGLUniformLocation | null = null;
 		let sceneTexture: WebGLTexture | null = null;
 		let blurTextureA: WebGLTexture | null = null;
@@ -474,6 +477,8 @@ export function BrandLavaField({
 			compositeSharpTextureLocation = gl.getUniformLocation(compositeProgram, "uSharpTexture");
 			compositeBlurTextureLocation = gl.getUniformLocation(compositeProgram, "uBlurTexture");
 			compositeResolutionLocation = gl.getUniformLocation(compositeProgram, "uResolution");
+			compositeMouseLocation = gl.getUniformLocation(compositeProgram, "uMouse");
+			compositeDepthOfFieldLocation = gl.getUniformLocation(compositeProgram, "uDepthOfField");
 			compositeStrengthLocation = gl.getUniformLocation(compositeProgram, "uStrength");
 
 			if (
@@ -502,6 +507,8 @@ export function BrandLavaField({
 				compositeSharpTextureLocation === null ||
 				compositeBlurTextureLocation === null ||
 				compositeResolutionLocation === null ||
+				compositeMouseLocation === null ||
+				compositeDepthOfFieldLocation === null ||
 				compositeStrengthLocation === null ||
 				positionLocation < 0 ||
 				blurPositionLocation < 0 ||
@@ -781,6 +788,14 @@ export function BrandLavaField({
 				gl.bindTexture(gl.TEXTURE_2D, blurTextureB);
 				gl.uniform1i(compositeBlurTextureLocation, 1);
 				gl.uniform2f(compositeResolutionLocation, canvas.width, canvas.height);
+				gl.uniform2f(compositeMouseLocation, mouse.x, mouse.y);
+				gl.uniform4f(
+					compositeDepthOfFieldLocation,
+					lavaControls.dofFocus,
+					lavaControls.dofRange,
+					lavaControls.dofStrength,
+					lavaControls.dofDynamic,
+				);
 				gl.uniform1f(compositeStrengthLocation, lavaControls.dofStrength);
 				drawFullscreen(compositeProgram, compositePositionLocation);
 			}

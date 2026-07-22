@@ -45,6 +45,7 @@ export type BrandLavaFieldProps = {
 	};
 	depthOfField?: {
 		enabled?: boolean;
+		dynamic?: boolean;
 		focus?: number;
 		range?: number;
 		strength?: number;
