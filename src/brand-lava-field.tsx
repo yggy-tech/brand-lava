@@ -53,6 +53,13 @@ type BlobState = {
 	radiusSeed: number;
 };
 
+type BlobLink = {
+	from: number;
+	to: number;
+	radiusScale: number;
+	enabled: number;
+};
+
 function cssColorToRgb(value: string, fallback: Rgb): Rgb {
 	const color = value.trim();
 	const cssVariable = color.match(/^var\(\s*(--[\w-]+)/);
@@ -174,6 +181,7 @@ const fragmentSource = `
 	uniform vec4 uLavaShape;
 	uniform vec4 uLavaMotion;
 	uniform vec4 uBlobSpheres[12];
+	uniform vec4 uBlobLinks[8];
 
 	float smin(float a, float b, float k) {
 		float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
@@ -196,6 +204,13 @@ const fragmentSource = `
 		return length(p - c) - r;
 	}
 
+	float sdCapsule(vec3 p, vec3 a, vec3 b, float r) {
+		vec3 pa = p - a;
+		vec3 ba = b - a;
+		float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+		return length(pa - ba * h) - r;
+	}
+
 	float mapField(vec3 p, float t) {
 		float d = 8.0;
 
@@ -204,27 +219,19 @@ const fragmentSource = `
 			d = smin(d, sdSphere(p, sphere.xyz, sphere.w), uLavaShape.w);
 		}
 
-		return d;
-	}
-
-	float nearConnection(vec3 p) {
-		float nearest = 8.0;
-		float secondNearest = 8.0;
-
-		for (int i = 0; i < 12; i++) {
-			vec4 sphere = uBlobSpheres[i];
-			float d = sdSphere(p, sphere.xyz, sphere.w);
-			if (d < nearest) {
-				secondNearest = nearest;
-				nearest = d;
-			} else if (d < secondNearest) {
-				secondNearest = d;
+		for (int i = 0; i < 8; i++) {
+			vec4 link = uBlobLinks[i];
+			int from = int(link.x);
+			int to = int(link.y);
+			if (link.w > 0.0) {
+				vec4 a = uBlobSpheres[from];
+				vec4 b = uBlobSpheres[to];
+				float radius = min(a.w, b.w) * link.z;
+				d = smin(d, sdCapsule(p, a.xyz, b.xyz, radius), radius * 0.55);
 			}
 		}
 
-		float bridge = smoothstep(uLavaShape.w * 1.7, 0.0, nearest + secondNearest);
-		float outsideSurface = smoothstep(0.0, uLavaShape.w * 0.8, nearest);
-		return bridge * outsideSurface;
+		return d;
 	}
 
 	vec3 normalAt(vec3 p, float t) {
@@ -282,9 +289,6 @@ const fragmentSource = `
 			lava = mix(lava, uCursorLightColor, cursorLight * 0.18);
 			color = lava;
 		}
-
-		float graphBridge = nearConnection(p) * 0.24;
-		color = mix(color, uLavaA, graphBridge);
 
 		for (int i = 0; i < 4; i++) {
 			vec4 highlight = uHighlights[i];
@@ -354,6 +358,19 @@ function createBlobStates(): BlobState[] {
 		phase: index * 1.61803,
 		radiusSeed: Math.sin(index * 127.1) * 0.5 + 0.5,
 	}));
+}
+
+function createBlobLinks(): BlobLink[] {
+	return [
+		{ from: 0, to: 2, radiusScale: 0.22, enabled: 1 },
+		{ from: 1, to: 4, radiusScale: 0.18, enabled: 1 },
+		{ from: 2, to: 5, radiusScale: 0.2, enabled: 1 },
+		{ from: 3, to: 7, radiusScale: 0.16, enabled: 1 },
+		{ from: 5, to: 8, radiusScale: 0.18, enabled: 1 },
+		{ from: 6, to: 10, radiusScale: 0.15, enabled: 1 },
+		{ from: 8, to: 11, radiusScale: 0.2, enabled: 1 },
+		{ from: 4, to: 9, radiusScale: 0.14, enabled: 1 },
+	];
 }
 
 function updateBlobStates(
@@ -519,6 +536,7 @@ export function BrandLavaField({
 		let lavaShapeLocation: WebGLUniformLocation | null = null;
 		let lavaMotionLocation: WebGLUniformLocation | null = null;
 		let blobSphereLocations: (WebGLUniformLocation | null)[] = [];
+		let blobLinkLocations: (WebGLUniformLocation | null)[] = [];
 
 		try {
 			program = createProgram(gl, vertexSource, fragmentSource);
@@ -547,6 +565,9 @@ export function BrandLavaField({
 			blobSphereLocations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) =>
 				gl.getUniformLocation(program, `uBlobSpheres[${index}]`),
 			);
+			blobLinkLocations = [0, 1, 2, 3, 4, 5, 6, 7].map((index) =>
+				gl.getUniformLocation(program, `uBlobLinks[${index}]`),
+			);
 
 			if (
 				resolutionLocation === null ||
@@ -562,6 +583,7 @@ export function BrandLavaField({
 				lavaShapeLocation === null ||
 				lavaMotionLocation === null ||
 				blobSphereLocations.some((location) => location === null) ||
+				blobLinkLocations.some((location) => location === null) ||
 				highlightLocations.some((location) => location === null) ||
 				highlightColorLocations.some((location) => location === null) ||
 				positionLocation < 0
@@ -588,6 +610,7 @@ export function BrandLavaField({
 		const mouse = { x: 0.5, y: 0.5 };
 		const targetMouse = { x: 0.5, y: 0.5 };
 		const blobs = createBlobStates();
+		const links = createBlobLinks();
 		const onMove = (event: PointerEvent) => {
 			const rect = root.getBoundingClientRect();
 			targetMouse.x = (event.clientX - rect.left) / rect.width;
@@ -671,6 +694,14 @@ export function BrandLavaField({
 						lavaControls.blobSize
 					: 0;
 				gl.uniform4f(location, blob.x, blob.y, blob.z, radius);
+			}
+			for (const [index, location] of blobLinkLocations.entries()) {
+				if (!location) {
+					continue;
+				}
+				const link = links[index];
+				const enabled = link.from < lavaControls.blobCount && link.to < lavaControls.blobCount ? link.enabled : 0;
+				gl.uniform4f(location, link.from, link.to, link.radiusScale, enabled);
 			}
 			gl.uniform4f(
 				cursorLightLocation,
