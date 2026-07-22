@@ -1,6 +1,23 @@
 import { useEffect, useRef } from "react";
 
 type Rgb = readonly [number, number, number];
+export type BrandLavaHighlight = {
+	x: number;
+	y: number;
+	radius?: number;
+	intensity?: number;
+	color?: string;
+};
+
+export type BrandLavaFieldProps = {
+	highlights?: readonly BrandLavaHighlight[];
+	cursorLight?: {
+		radius?: number;
+		intensity?: number;
+		color?: string;
+	};
+};
+
 type ThemeColors = {
 	background: Rgb;
 	card: Rgb;
@@ -11,6 +28,14 @@ type ThemeColors = {
 
 function cssColorToRgb(value: string, fallback: Rgb): Rgb {
 	const color = value.trim();
+	const cssVariable = color.match(/^var\(\s*(--[\w-]+)/);
+	if (cssVariable && typeof document !== "undefined") {
+		const resolved = getComputedStyle(document.documentElement).getPropertyValue(cssVariable[1]);
+		if (resolved.trim()) {
+			return cssColorToRgb(resolved, fallback);
+		}
+	}
+
 	const hex = color.match(/^#([0-9a-f]{6})$/i);
 	if (hex) {
 		const raw = Number.parseInt(hex[1], 16);
@@ -115,6 +140,10 @@ const fragmentSource = `
 	uniform vec3 uLavaA;
 	uniform vec3 uLavaB;
 	uniform vec3 uLavaC;
+	uniform vec4 uHighlights[4];
+	uniform vec3 uHighlightColors[4];
+	uniform vec4 uCursorLight;
+	uniform vec3 uCursorLightColor;
 
 	float smin(float a, float b, float k) {
 		float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
@@ -209,6 +238,8 @@ const fragmentSource = `
 		float warm = smoothstep(1.1, 0.0, length(uv - vec2(-0.05, -0.1)));
 		vec3 color = mix(uBackground, uCard, 0.42 + paper * 0.2);
 		color = mix(color, uLavaB, warm * 0.16);
+		vec2 screenUv = gl_FragCoord.xy / uResolution.xy;
+		float cursorLight = smoothstep(uCursorLight.z, 0.0, length(screenUv - uMouse)) * uCursorLight.w;
 
 		if (hit > 0.5) {
 			vec3 p = ro + rd * travel;
@@ -221,7 +252,14 @@ const fragmentSource = `
 			vec3 lava = mix(uLavaC, uLavaB, smoothstep(0.0, 1.0, wave * 0.22 + light * 0.56));
 			lava = mix(lava, uLavaA, fresnel * 0.12 + glow * 0.06);
 			lava += uCard * fresnel * 0.08;
+			lava = mix(lava, uCursorLightColor, cursorLight * 0.18);
 			color = lava;
+		}
+
+		for (int i = 0; i < 4; i++) {
+			vec4 highlight = uHighlights[i];
+			float area = smoothstep(highlight.z, 0.0, length(screenUv - highlight.xy)) * highlight.w;
+			color = mix(color, uHighlightColors[i], area);
 		}
 
 		float vignette = smoothstep(1.35, 0.12, length(uv) * 1.05);
@@ -231,9 +269,38 @@ const fragmentSource = `
 	}
 `;
 
-export function BrandLavaField() {
+function clampUnit(value: number): number {
+	return Math.max(0, Math.min(1, value));
+}
+
+function normalizeHighlights(
+	highlights: readonly BrandLavaHighlight[] | undefined,
+): readonly Required<BrandLavaHighlight>[] {
+	return (highlights ?? []).slice(0, 4).map((highlight) => ({
+		x: clampUnit(highlight.x),
+		y: clampUnit(highlight.y),
+		radius: Math.max(0.01, Math.min(1, highlight.radius ?? 0.22)),
+		intensity: clampUnit(highlight.intensity ?? 0.38),
+		color: highlight.color ?? "var(--brand-lava-highlight, var(--brand-lava-1, #94ad57))",
+	}));
+}
+
+export function BrandLavaField({ highlights, cursorLight }: BrandLavaFieldProps) {
 	const rootRef = useRef<HTMLDivElement | null>(null);
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
+	const highlightsRef = useRef(normalizeHighlights(highlights));
+	const cursorLightRef = useRef({
+		radius: Math.max(0.01, Math.min(1, cursorLight?.radius ?? 0.34)),
+		intensity: clampUnit(cursorLight?.intensity ?? 0.7),
+		color: cursorLight?.color ?? "var(--brand-lava-cursor-light, var(--brand-lava-1, #94ad57))",
+	});
+
+	highlightsRef.current = normalizeHighlights(highlights);
+	cursorLightRef.current = {
+		radius: Math.max(0.01, Math.min(1, cursorLight?.radius ?? 0.34)),
+		intensity: clampUnit(cursorLight?.intensity ?? 0.7),
+		color: cursorLight?.color ?? "var(--brand-lava-cursor-light, var(--brand-lava-1, #94ad57))",
+	};
 
 	useEffect(() => {
 		const root = rootRef.current;
@@ -264,6 +331,10 @@ export function BrandLavaField() {
 		let lavaALocation: WebGLUniformLocation | null = null;
 		let lavaBLocation: WebGLUniformLocation | null = null;
 		let lavaCLocation: WebGLUniformLocation | null = null;
+		let highlightLocations: (WebGLUniformLocation | null)[] = [];
+		let highlightColorLocations: (WebGLUniformLocation | null)[] = [];
+		let cursorLightLocation: WebGLUniformLocation | null = null;
+		let cursorLightColorLocation: WebGLUniformLocation | null = null;
 
 		try {
 			program = createProgram(gl, vertexSource, fragmentSource);
@@ -281,6 +352,12 @@ export function BrandLavaField() {
 			lavaALocation = gl.getUniformLocation(program, "uLavaA");
 			lavaBLocation = gl.getUniformLocation(program, "uLavaB");
 			lavaCLocation = gl.getUniformLocation(program, "uLavaC");
+			highlightLocations = [0, 1, 2, 3].map((index) => gl.getUniformLocation(program, `uHighlights[${index}]`));
+			highlightColorLocations = [0, 1, 2, 3].map((index) =>
+				gl.getUniformLocation(program, `uHighlightColors[${index}]`),
+			);
+			cursorLightLocation = gl.getUniformLocation(program, "uCursorLight");
+			cursorLightColorLocation = gl.getUniformLocation(program, "uCursorLightColor");
 
 			if (
 				resolutionLocation === null ||
@@ -291,6 +368,10 @@ export function BrandLavaField() {
 				lavaALocation === null ||
 				lavaBLocation === null ||
 				lavaCLocation === null ||
+				cursorLightLocation === null ||
+				cursorLightColorLocation === null ||
+				highlightLocations.some((location) => location === null) ||
+				highlightColorLocations.some((location) => location === null) ||
 				positionLocation < 0
 			) {
 				throw new Error("Unable to initialize WebGL uniform attributes");
@@ -348,7 +429,9 @@ export function BrandLavaField() {
 				!cardLocation ||
 				!lavaALocation ||
 				!lavaBLocation ||
-				!lavaCLocation
+				!lavaCLocation ||
+				!cursorLightLocation ||
+				!cursorLightColorLocation
 			) {
 				return;
 			}
@@ -364,6 +447,29 @@ export function BrandLavaField() {
 			gl.uniform3f(lavaALocation, themeColors.lavaA[0], themeColors.lavaA[1], themeColors.lavaA[2]);
 			gl.uniform3f(lavaBLocation, themeColors.lavaB[0], themeColors.lavaB[1], themeColors.lavaB[2]);
 			gl.uniform3f(lavaCLocation, themeColors.lavaC[0], themeColors.lavaC[1], themeColors.lavaC[2]);
+			gl.uniform4f(
+				cursorLightLocation,
+				mouse.x,
+				mouse.y,
+				cursorLightRef.current.radius,
+				cursorLightRef.current.intensity,
+			);
+			const cursorColor = cssColorToRgb(cursorLightRef.current.color, themeColors.lavaA);
+			gl.uniform3f(cursorLightColorLocation, cursorColor[0], cursorColor[1], cursorColor[2]);
+			for (const [index, location] of highlightLocations.entries()) {
+				const colorLocation = highlightColorLocations[index];
+				if (!location || !colorLocation) {
+					continue;
+				}
+				const highlight = highlightsRef.current[index];
+				const x = highlight?.x ?? 0;
+				const y = highlight?.y ?? 0;
+				const radius = highlight?.radius ?? 0.01;
+				const intensity = highlight?.intensity ?? 0;
+				const color = cssColorToRgb(highlight?.color ?? "transparent", themeColors.lavaA);
+				gl.uniform4f(location, x, y, radius, intensity);
+				gl.uniform3f(colorLocation, color[0], color[1], color[2]);
+			}
 			gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
 			animationFrame = requestAnimationFrame(render);
