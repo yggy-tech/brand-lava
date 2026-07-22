@@ -349,7 +349,9 @@ const fragmentSource = `
 		float travel = 0.0;
 		float hit = 0.0;
 		vec3 color = shadeRay(uv, uTime, travel, hit);
-		float blurAmount = smoothstep(0.0, uDepthOfField.y, abs(travel - uDepthOfField.x)) * uDepthOfField.z * uDepthOfField.w;
+		float cursorBlobGate = hit * smoothstep(uCursorLight.z, 0.0, length(screenUv - uMouse));
+		float blurAmount =
+			smoothstep(0.0, uDepthOfField.y, abs(travel - uDepthOfField.x)) * uDepthOfField.z * uDepthOfField.w * cursorBlobGate;
 		if (blurAmount > 0.01) {
 			vec2 px = vec2(1.0 / uResolution.x, 1.0 / uResolution.y);
 			float radius = blurAmount * 7.5;
