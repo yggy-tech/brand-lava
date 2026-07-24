@@ -1,6 +1,6 @@
 {
   "name": "@drasil-ai/brand-lava",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "A configurable React and WebGL lava field for Drasil brand surfaces.",
   "license": "UNLICENSED",
   "repository": {
