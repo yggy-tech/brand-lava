@@ -417,39 +417,44 @@ export function BrandLavaField({
 		let connectionEndLocations: (WebGLUniformLocation | null)[] = [];
 
 		try {
-			program = createProgram(gl, vertexSource, fragmentSource);
+			const createdProgram = createProgram(gl, vertexSource, fragmentSource);
+			program = createdProgram;
 			positionBuffer = gl.createBuffer();
 			if (!positionBuffer) {
 				throw new Error("Unable to allocate position buffer");
 			}
 
-			positionLocation = gl.getAttribLocation(program, "aPosition");
-			resolutionLocation = gl.getUniformLocation(program, "uResolution");
-			timeLocation = gl.getUniformLocation(program, "uTime");
-			mouseLocation = gl.getUniformLocation(program, "uMouse");
-			backgroundLocation = gl.getUniformLocation(program, "uBackground");
-			cardLocation = gl.getUniformLocation(program, "uCard");
-			lavaALocation = gl.getUniformLocation(program, "uLavaA");
-			lavaBLocation = gl.getUniformLocation(program, "uLavaB");
-			lavaCLocation = gl.getUniformLocation(program, "uLavaC");
-			highlightLocations = [0, 1, 2, 3].map((index) => gl.getUniformLocation(program, `uHighlights[${index}]`));
+			positionLocation = gl.getAttribLocation(createdProgram, "aPosition");
+			resolutionLocation = gl.getUniformLocation(createdProgram, "uResolution");
+			timeLocation = gl.getUniformLocation(createdProgram, "uTime");
+			mouseLocation = gl.getUniformLocation(createdProgram, "uMouse");
+			backgroundLocation = gl.getUniformLocation(createdProgram, "uBackground");
+			cardLocation = gl.getUniformLocation(createdProgram, "uCard");
+			lavaALocation = gl.getUniformLocation(createdProgram, "uLavaA");
+			lavaBLocation = gl.getUniformLocation(createdProgram, "uLavaB");
+			lavaCLocation = gl.getUniformLocation(createdProgram, "uLavaC");
+			highlightLocations = [0, 1, 2, 3].map((index) =>
+				gl.getUniformLocation(createdProgram, `uHighlights[${index}]`),
+			);
 			highlightColorLocations = [0, 1, 2, 3].map((index) =>
-				gl.getUniformLocation(program, `uHighlightColors[${index}]`),
+				gl.getUniformLocation(createdProgram, `uHighlightColors[${index}]`),
 			);
-			cursorLightLocation = gl.getUniformLocation(program, "uCursorLight");
-			cursorLightColorLocation = gl.getUniformLocation(program, "uCursorLightColor");
-			lavaShapeLocation = gl.getUniformLocation(program, "uLavaShape");
-			lavaMotionLocation = gl.getUniformLocation(program, "uLavaMotion");
-			cameraLocation = gl.getUniformLocation(program, "uCamera");
+			cursorLightLocation = gl.getUniformLocation(createdProgram, "uCursorLight");
+			cursorLightColorLocation = gl.getUniformLocation(createdProgram, "uCursorLightColor");
+			lavaShapeLocation = gl.getUniformLocation(createdProgram, "uLavaShape");
+			lavaMotionLocation = gl.getUniformLocation(createdProgram, "uLavaMotion");
+			cameraLocation = gl.getUniformLocation(createdProgram, "uCamera");
 			blobSphereLocations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) =>
-				gl.getUniformLocation(program, `uBlobSpheres[${index}]`),
+				gl.getUniformLocation(createdProgram, `uBlobSpheres[${index}]`),
 			);
-			staticSphereLocations = [0, 1, 2].map((index) => gl.getUniformLocation(program, `uStaticSpheres[${index}]`));
+			staticSphereLocations = [0, 1, 2].map((index) =>
+				gl.getUniformLocation(createdProgram, `uStaticSpheres[${index}]`),
+			);
 			connectionStartLocations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) =>
-				gl.getUniformLocation(program, `uConnectionStart[${index}]`),
+				gl.getUniformLocation(createdProgram, `uConnectionStart[${index}]`),
 			);
 			connectionEndLocations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) =>
-				gl.getUniformLocation(program, `uConnectionEnd[${index}]`),
+				gl.getUniformLocation(createdProgram, `uConnectionEnd[${index}]`),
 			);
 
 			if (

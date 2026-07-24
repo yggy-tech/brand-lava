@@ -1,6 +1,16 @@
 {
-  "name": "@yggdrasil/brand-lava",
+  "name": "@drasil-ai/brand-lava",
   "version": "0.1.4",
+  "description": "A configurable React and WebGL lava field for Drasil brand surfaces.",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/drasil-ai/brand-lava.git"
+  },
+  "homepage": "https://github.com/drasil-ai/brand-lava#readme",
+  "bugs": {
+    "url": "https://github.com/drasil-ai/brand-lava/issues"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "exports": {
@@ -10,8 +20,33 @@
   },
   "type": "module",
   "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "styles.css"
+  ],
+  "sideEffects": [
+    "./styles.css"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "check": "bun run typecheck && bun run build",
+    "typecheck": "tsc --noEmit -p tsconfig.build.json",
+    "prepack": "bun run check"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  },
   "peerDependencies": {
     "react": "^19.2.3",
     "react-dom": "^19.2.3"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "tsdown": "^0.18.2",
+    "typescript": "^5.9.3"
   }
 }
