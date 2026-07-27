@@ -1,11 +1,3 @@
-export type BrandLavaHighlight = {
-	x: number;
-	y: number;
-	radius?: number;
-	intensity?: number;
-	color?: string;
-};
-
 export type BrandLavaDistribution = "column" | "balanced" | "spread";
 
 export type BrandLavaStaticNode = {
@@ -17,7 +9,7 @@ export type BrandLavaStaticNode = {
 
 export type BrandLavaFieldProps = {
 	resolutionScale?: number;
-	highlights?: readonly BrandLavaHighlight[];
+	blur?: number;
 	cursorLight?: {
 		radius?: number;
 		intensity?: number;
@@ -34,16 +26,6 @@ export type BrandLavaFieldProps = {
 		count?: number;
 		size?: number;
 		drift?: number;
-	};
-	connections?: {
-		mode?: "none" | "elastic";
-		count?: number;
-		segments?: number;
-		radius?: number;
-		tension?: number;
-		damping?: number;
-		wobble?: number;
-		blend?: number;
 	};
 	bounds?: {
 		x?: readonly [number, number];
@@ -94,22 +76,6 @@ export type BlobState = {
 	offsetY: number;
 	phase: number;
 	radiusSeed: number;
-};
-
-export type ElasticPoint = {
-	x: number;
-	y: number;
-	z: number;
-	vx: number;
-	vy: number;
-	vz: number;
-};
-
-export type ElasticConnection = {
-	from: number;
-	to: number;
-	bend: number;
-	points: ElasticPoint[];
 };
 
 export type SatelliteBlob = {

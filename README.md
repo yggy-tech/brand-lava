@@ -4,16 +4,10 @@ A configurable React and WebGL lava field for Drasil brand surfaces.
 
 ## Install
 
-Authenticate Bun or npm with GitHub Packages, then install the package:
+Install the package:
 
 ```sh
 bun add @drasil-ai/brand-lava
-```
-
-Your project-level `.npmrc` must route the scope to GitHub Packages:
-
-```ini
-@drasil-ai:registry=https://npm.pkg.github.com
 ```
 
 ## Use
@@ -27,10 +21,10 @@ export function Hero() {
 }
 ```
 
-The package exports `BrandLavaField`, its backwards-compatible
-`LavaLampField` alias, and the public prop and scene types.
+The package exports `BrandLavaField` and its public prop and scene types.
 `resolutionScale` multiplies the canvas pixel ratio from `0.25` to `1`;
-use `0.5` for large background surfaces.
+use `0.5` for large background surfaces. Reduced resolutions get a small
+CSS blur automatically; set `blur` in CSS pixels to override it.
 
 ## Development
 
@@ -39,4 +33,4 @@ bun install
 bun run check
 ```
 
-Releases are published from `v*` tags to GitHub Packages.
+Releases are published from `v*` tags to npm with trusted publishing.

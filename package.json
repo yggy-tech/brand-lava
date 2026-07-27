@@ -1,6 +1,6 @@
 {
   "name": "@drasil-ai/brand-lava",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "A configurable React and WebGL lava field for Drasil brand surfaces.",
   "license": "UNLICENSED",
   "repository": {
@@ -35,8 +35,8 @@
     "prepack": "bun run check"
   },
   "publishConfig": {
-    "access": "restricted",
-    "registry": "https://npm.pkg.github.com"
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
   },
   "peerDependencies": {
     "react": "^19.2.3",

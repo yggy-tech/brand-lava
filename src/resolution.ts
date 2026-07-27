@@ -7,3 +7,7 @@ export function getRenderSize(
 	const pixelRatio = Math.max(1, Math.min(devicePixelRatio, 2)) * Math.max(0.25, Math.min(resolutionScale, 1));
 	return [Math.max(1, Math.floor(width * pixelRatio)), Math.max(1, Math.floor(height * pixelRatio))];
 }
+
+export function getBlurRadius(resolutionScale: number, blur?: number): number {
+	return Math.max(0, Math.min(blur ?? (1 - Math.max(0.25, Math.min(resolutionScale, 1))) * 2, 8));
+}
