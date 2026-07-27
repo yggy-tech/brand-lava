@@ -1,6 +1,6 @@
 {
   "name": "@drasil-ai/brand-lava",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "A configurable React and WebGL lava field for Drasil brand surfaces.",
   "license": "UNLICENSED",
   "repository": {
@@ -29,7 +29,8 @@
   ],
   "scripts": {
     "build": "tsdown",
-    "check": "bun run typecheck && bun run build",
+    "check": "bun run test && bun run typecheck && bun run build",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.build.json",
     "prepack": "bun run check"
   },
@@ -47,6 +48,7 @@
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "tsdown": "^0.18.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
   }
 }
