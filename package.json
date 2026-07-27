@@ -1,8 +1,8 @@
 {
   "name": "@yggy-tech/brand-lava",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "A configurable React and WebGL lava field for Drasil brand surfaces.",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/yggy-tech/brand-lava.git"
