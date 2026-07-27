@@ -23,12 +23,14 @@ import { BrandLavaField } from "@drasil-ai/brand-lava";
 import "@drasil-ai/brand-lava/styles.css";
 
 export function Hero() {
-  return <BrandLavaField className="h-full w-full" />;
+  return <BrandLavaField resolutionScale={0.5} />;
 }
 ```
 
 The package exports `BrandLavaField`, its backwards-compatible
 `LavaLampField` alias, and the public prop and scene types.
+`resolutionScale` multiplies the canvas pixel ratio from `0.25` to `1`;
+use `0.5` for large background surfaces.
 
 ## Development
 
@@ -38,4 +40,3 @@ bun run check
 ```
 
 Releases are published from `v*` tags to GitHub Packages.
-

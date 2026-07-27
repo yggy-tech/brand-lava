@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { getRenderSize } from "./resolution";
 import { fragmentSource, vertexSource } from "./shaders";
 import { cssColorToRgb, readThemeColors } from "./theme";
 import type {
@@ -305,6 +306,7 @@ function pushBlobPulse(
 }
 
 export function BrandLavaField({
+	resolutionScale = 1,
 	highlights,
 	cursorLight,
 	fieldInteraction,
@@ -522,9 +524,12 @@ export function BrandLavaField({
 
 		const resize = () => {
 			const rect = canvas.getBoundingClientRect();
-			const dpr = Math.max(1, Math.min(window.devicePixelRatio, 2));
-			canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-			canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+			[canvas.width, canvas.height] = getRenderSize(
+				rect.width,
+				rect.height,
+				window.devicePixelRatio,
+				resolutionScale,
+			);
 			gl.viewport(0, 0, canvas.width, canvas.height);
 		};
 
@@ -712,7 +717,7 @@ export function BrandLavaField({
 				gl.deleteProgram(program);
 			}
 		};
-	}, []);
+	}, [resolutionScale]);
 
 	return (
 		<div

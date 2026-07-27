@@ -16,6 +16,7 @@ export type BrandLavaStaticNode = {
 };
 
 export type BrandLavaFieldProps = {
+	resolutionScale?: number;
 	highlights?: readonly BrandLavaHighlight[];
 	cursorLight?: {
 		radius?: number;
