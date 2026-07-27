@@ -17,8 +17,6 @@ export const fragmentSource = `
 	uniform vec3 uLavaA;
 	uniform vec3 uLavaB;
 	uniform vec3 uLavaC;
-	uniform vec4 uHighlights[4];
-	uniform vec3 uHighlightColors[4];
 	uniform vec4 uCursorLight;
 	uniform vec3 uCursorLightColor;
 	uniform vec4 uLavaShape;
@@ -26,8 +24,6 @@ export const fragmentSource = `
 	uniform vec4 uCamera;
 	uniform vec4 uBlobSpheres[12];
 	uniform vec4 uStaticSpheres[3];
-	uniform vec4 uConnectionStart[12];
-	uniform vec4 uConnectionEnd[12];
 
 	float smin(float a, float b, float k) {
 		float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
@@ -38,13 +34,6 @@ export const fragmentSource = `
 		vec3 offset = p - c;
 		offset.z *= 0.42;
 		return length(offset) - r;
-	}
-
-	float sdCapsule(vec3 p, vec3 a, vec3 b, float r) {
-		vec3 pa = p - a;
-		vec3 ba = b - a;
-		float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-		return length(pa - ba * h) - r;
 	}
 
 	float mapField(vec3 p, float t) {
@@ -61,14 +50,6 @@ export const fragmentSource = `
 			vec4 sphere = uStaticSpheres[i];
 			if (sphere.w > 0.001) {
 				d = smin(d, sdSphere(p, sphere.xyz, sphere.w), uLavaShape.w);
-			}
-		}
-
-		for (int i = 0; i < 12; i++) {
-			vec4 start = uConnectionStart[i];
-			vec4 end = uConnectionEnd[i];
-			if (end.w > 0.0) {
-				d = smin(d, sdCapsule(p, start.xyz, end.xyz, start.w), end.w);
 			}
 		}
 
@@ -137,16 +118,9 @@ export const fragmentSource = `
 
 	void main() {
 		vec2 uv = (gl_FragCoord.xy / uResolution.xy - 0.5) * vec2(uResolution.x / uResolution.y, 1.0);
-		vec2 screenUv = gl_FragCoord.xy / uResolution.xy;
 		float travel = 0.0;
 		float hit = 0.0;
 		vec3 color = shadeRay(uv, uTime, travel, hit);
-		for (int i = 0; i < 4; i++) {
-			vec4 highlight = uHighlights[i];
-			float area = smoothstep(highlight.z, 0.0, length(screenUv - highlight.xy)) * highlight.w;
-			color = mix(color, uHighlightColors[i], area);
-			color += uHighlightColors[i] * area * 0.16;
-		}
 
 		float vignette = smoothstep(1.35, 0.12, length(uv) * 1.05);
 		float dither = fract((gl_FragCoord.x + gl_FragCoord.y * 1.61803398875) * 0.5) - 0.5;

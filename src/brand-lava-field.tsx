@@ -1,31 +1,17 @@
 import { useEffect, useRef } from "react";
-import { getRenderSize } from "./resolution";
+import { getBlurRadius, getRenderSize } from "./resolution";
 import { fragmentSource, vertexSource } from "./shaders";
 import { cssColorToRgb, readThemeColors } from "./theme";
 import type {
 	BlobState,
 	BrandLavaDistribution,
 	BrandLavaFieldProps,
-	BrandLavaHighlight,
-	ElasticConnection,
 	SatelliteBlob,
 } from "./types";
 import { activateProgram, createProgram } from "./webgl";
 
 function clampUnit(value: number): number {
 	return Math.max(0, Math.min(1, value));
-}
-
-function normalizeHighlights(
-	highlights: readonly BrandLavaHighlight[] | undefined,
-): readonly Required<BrandLavaHighlight>[] {
-	return (highlights ?? []).slice(0, 4).map((highlight) => ({
-		x: clampUnit(highlight.x),
-		y: clampUnit(highlight.y),
-		radius: Math.max(0.01, Math.min(1, highlight.radius ?? 0.22)),
-		intensity: clampUnit(highlight.intensity ?? 0.38),
-		color: highlight.color ?? "var(--brand-lava-highlight, var(--brand-lava-1, #94ad57))",
-	}));
 }
 
 function normalizeDistribution(distribution: BrandLavaDistribution | undefined): number {
@@ -58,14 +44,6 @@ function normalizeLavaControls(props: BrandLavaFieldProps) {
 		satelliteCount: Math.max(0, Math.min(4, Math.round(props.satellites?.count ?? 3))),
 		satelliteSize: Math.max(0.08, Math.min(0.65, props.satellites?.size ?? 0.32)),
 		satelliteDrift: Math.max(0, Math.min(1, props.satellites?.drift ?? 0.32)),
-		connectionMode: props.connections?.mode ?? "none",
-		connectionCount: Math.max(0, Math.min(3, Math.round(props.connections?.count ?? 3))),
-		connectionSegments: Math.max(2, Math.min(4, Math.round(props.connections?.segments ?? 4))),
-		connectionRadius: Math.max(0.01, Math.min(0.18, props.connections?.radius ?? 0.035)),
-		connectionTension: Math.max(0.05, Math.min(1, props.connections?.tension ?? 0.38)),
-		connectionDamping: Math.max(0.7, Math.min(0.99, props.connections?.damping ?? 0.91)),
-		connectionWobble: Math.max(0, Math.min(1, props.connections?.wobble ?? 0.28)),
-		connectionBlend: Math.max(0.002, Math.min(0.12, props.connections?.blend ?? 0.018)),
 		boundsX: props.bounds?.x ?? ([-0.82, 0.82] as const),
 		boundsY: props.bounds?.y ?? ([-1.58, 1.86] as const),
 		boundsZ: props.bounds?.z ?? ([-0.36, 0.36] as const),
@@ -132,17 +110,6 @@ function createBlobStates(): BlobState[] {
 	}));
 }
 
-function createElasticConnections(): ElasticConnection[] {
-	return [
-		{ from: 1, to: 4, bend: 1 },
-		{ from: 3, to: 7, bend: -1 },
-		{ from: 6, to: 10, bend: 0.75 },
-	].map((connection) => ({
-		...connection,
-		points: Array.from({ length: 5 }, () => ({ x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 })),
-	}));
-}
-
 function createSatelliteBlobs(): SatelliteBlob[] {
 	return [
 		{ from: 1, to: 4, phase: 0.3, offset: 1 },
@@ -150,62 +117,6 @@ function createSatelliteBlobs(): SatelliteBlob[] {
 		{ from: 6, to: 10, phase: 2.6, offset: 0.75 },
 		{ from: 8, to: 11, phase: 4.1, offset: -0.65 },
 	];
-}
-
-function updateElasticConnections(
-	connections: ElasticConnection[],
-	blobs: BlobState[],
-	controls: ReturnType<typeof normalizeLavaControls>,
-	time: number,
-) {
-	for (const [connectionIndex, connection] of connections.entries()) {
-		const from = blobs[connection.from];
-		const to = blobs[connection.to];
-		const enabled =
-			controls.connectionMode === "elastic" &&
-			connectionIndex < controls.connectionCount &&
-			connection.from < controls.blobCount &&
-			connection.to < controls.blobCount;
-		const dx = to.x - from.x;
-		const dy = to.y - from.y;
-		const dz = to.z - from.z;
-		const distance = Math.max(0.001, Math.hypot(dx, dy));
-		const normalX = -dy / distance;
-		const normalY = dx / distance;
-
-		for (const [pointIndex, point] of connection.points.entries()) {
-			const t = pointIndex / (connection.points.length - 1);
-			const endpoint = pointIndex === 0 || pointIndex === connection.points.length - 1;
-			const curve =
-				Math.sin(t * Math.PI) * connection.bend * controls.connectionWobble * Math.min(0.34, distance * 0.2);
-			const phase = time * (0.72 + connectionIndex * 0.11) + pointIndex * 1.7 + connectionIndex;
-			const wobble = Math.sin(phase) * controls.connectionWobble * 0.035 * Math.sin(t * Math.PI);
-			const targetX = from.x + dx * t + normalX * (curve + wobble);
-			const targetY =
-				from.y + dy * t + normalY * (curve + wobble) + Math.sin(phase * 0.73) * 0.025 * Math.sin(t * Math.PI);
-			const targetZ = from.z + dz * t + Math.cos(phase * 0.67) * 0.035 * Math.sin(t * Math.PI);
-
-			if (endpoint || !enabled) {
-				point.x = targetX;
-				point.y = targetY;
-				point.z = targetZ;
-				point.vx = 0;
-				point.vy = 0;
-				point.vz = 0;
-				continue;
-			}
-
-			point.vx += (targetX - point.x) * controls.connectionTension * 0.018;
-			point.vy += (targetY - point.y) * controls.connectionTension * 0.018 - controls.gravity * 0.00025;
-			point.vz += (targetZ - point.z) * controls.connectionTension * 0.018;
-			point.vx *= controls.connectionDamping;
-			point.vy *= controls.connectionDamping;
-			point.vz *= controls.connectionDamping;
-			point.x += point.vx;
-			point.y += point.vy;
-			point.z += point.vz;
-		}
-	}
 }
 
 function updateBlobStates(
@@ -307,11 +218,10 @@ function pushBlobPulse(
 
 export function BrandLavaField({
 	resolutionScale = 1,
-	highlights,
+	blur,
 	cursorLight,
 	fieldInteraction,
 	satellites,
-	connections,
 	bounds,
 	staticNodes,
 	camera,
@@ -325,9 +235,9 @@ export function BrandLavaField({
 	mergeSmoothness,
 	clickPulse,
 }: BrandLavaFieldProps) {
+	const blurRadius = getBlurRadius(resolutionScale, blur);
 	const rootRef = useRef<HTMLDivElement | null>(null);
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
-	const highlightsRef = useRef(normalizeHighlights(highlights));
 	const lavaControlsRef = useRef(
 		normalizeLavaControls({
 			blobCount,
@@ -341,7 +251,6 @@ export function BrandLavaField({
 			clickPulse,
 			fieldInteraction,
 			satellites,
-			connections,
 			bounds,
 			staticNodes,
 			camera,
@@ -353,7 +262,6 @@ export function BrandLavaField({
 		color: cursorLight?.color ?? "var(--brand-lava-cursor-light, var(--brand-lava-1, #94ad57))",
 	});
 
-	highlightsRef.current = normalizeHighlights(highlights);
 	lavaControlsRef.current = normalizeLavaControls({
 		blobCount,
 		blobSize,
@@ -366,7 +274,6 @@ export function BrandLavaField({
 		clickPulse,
 		fieldInteraction,
 		satellites,
-		connections,
 		bounds,
 		staticNodes,
 		camera,
@@ -406,8 +313,6 @@ export function BrandLavaField({
 		let lavaALocation: WebGLUniformLocation | null = null;
 		let lavaBLocation: WebGLUniformLocation | null = null;
 		let lavaCLocation: WebGLUniformLocation | null = null;
-		let highlightLocations: (WebGLUniformLocation | null)[] = [];
-		let highlightColorLocations: (WebGLUniformLocation | null)[] = [];
 		let cursorLightLocation: WebGLUniformLocation | null = null;
 		let cursorLightColorLocation: WebGLUniformLocation | null = null;
 		let lavaShapeLocation: WebGLUniformLocation | null = null;
@@ -415,8 +320,6 @@ export function BrandLavaField({
 		let cameraLocation: WebGLUniformLocation | null = null;
 		let blobSphereLocations: (WebGLUniformLocation | null)[] = [];
 		let staticSphereLocations: (WebGLUniformLocation | null)[] = [];
-		let connectionStartLocations: (WebGLUniformLocation | null)[] = [];
-		let connectionEndLocations: (WebGLUniformLocation | null)[] = [];
 
 		try {
 			const createdProgram = createProgram(gl, vertexSource, fragmentSource);
@@ -435,12 +338,6 @@ export function BrandLavaField({
 			lavaALocation = gl.getUniformLocation(createdProgram, "uLavaA");
 			lavaBLocation = gl.getUniformLocation(createdProgram, "uLavaB");
 			lavaCLocation = gl.getUniformLocation(createdProgram, "uLavaC");
-			highlightLocations = [0, 1, 2, 3].map((index) =>
-				gl.getUniformLocation(createdProgram, `uHighlights[${index}]`),
-			);
-			highlightColorLocations = [0, 1, 2, 3].map((index) =>
-				gl.getUniformLocation(createdProgram, `uHighlightColors[${index}]`),
-			);
 			cursorLightLocation = gl.getUniformLocation(createdProgram, "uCursorLight");
 			cursorLightColorLocation = gl.getUniformLocation(createdProgram, "uCursorLightColor");
 			lavaShapeLocation = gl.getUniformLocation(createdProgram, "uLavaShape");
@@ -451,12 +348,6 @@ export function BrandLavaField({
 			);
 			staticSphereLocations = [0, 1, 2].map((index) =>
 				gl.getUniformLocation(createdProgram, `uStaticSpheres[${index}]`),
-			);
-			connectionStartLocations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) =>
-				gl.getUniformLocation(createdProgram, `uConnectionStart[${index}]`),
-			);
-			connectionEndLocations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) =>
-				gl.getUniformLocation(createdProgram, `uConnectionEnd[${index}]`),
 			);
 
 			if (
@@ -475,10 +366,6 @@ export function BrandLavaField({
 				cameraLocation === null ||
 				blobSphereLocations.some((location) => location === null) ||
 				staticSphereLocations.some((location) => location === null) ||
-				connectionStartLocations.some((location) => location === null) ||
-				connectionEndLocations.some((location) => location === null) ||
-				highlightLocations.some((location) => location === null) ||
-				highlightColorLocations.some((location) => location === null) ||
 				positionLocation < 0
 			) {
 				throw new Error("Unable to initialize WebGL uniform attributes");
@@ -504,7 +391,6 @@ export function BrandLavaField({
 		const targetMouse = { x: 0.5, y: 0.5 };
 		const blobs = createBlobStates();
 		const satelliteBlobs = createSatelliteBlobs();
-		const elasticConnections = createElasticConnections();
 		const onMove = (event: PointerEvent) => {
 			const rect = root.getBoundingClientRect();
 			targetMouse.x = (event.clientX - rect.left) / rect.width;
@@ -582,7 +468,6 @@ export function BrandLavaField({
 			gl.uniform3f(lavaBLocation, themeColors.lavaB[0], themeColors.lavaB[1], themeColors.lavaB[2]);
 			gl.uniform3f(lavaCLocation, themeColors.lavaC[0], themeColors.lavaC[1], themeColors.lavaC[2]);
 			updateBlobStates(blobs, lavaControls, time * 0.001, mouse);
-			updateElasticConnections(elasticConnections, blobs, lavaControls, time * 0.001);
 			gl.uniform4f(
 				lavaShapeLocation,
 				lavaControls.blobCount,
@@ -647,27 +532,6 @@ export function BrandLavaField({
 				const node = lavaControls.staticNodes[index];
 				gl.uniform4f(location, node?.x ?? 0, node?.y ?? 0, node?.z ?? 0, node?.radius ?? 0);
 			}
-			for (const [index, location] of connectionStartLocations.entries()) {
-				const endLocation = connectionEndLocations[index];
-				if (!location || !endLocation) {
-					continue;
-				}
-				const connection = elasticConnections[Math.floor(index / 4)];
-				const segmentIndex = index % 4;
-				const enabled =
-					connection &&
-					lavaControls.connectionMode === "elastic" &&
-					Math.floor(index / 4) < lavaControls.connectionCount &&
-					segmentIndex < lavaControls.connectionSegments
-						? 1
-						: 0;
-				const start = connection?.points[segmentIndex];
-				const end = connection?.points[segmentIndex + 1];
-				const taper = Math.sin(((segmentIndex + 0.5) / Math.max(1, lavaControls.connectionSegments)) * Math.PI);
-				const radius = lavaControls.connectionRadius * lavaControls.blobSize * (0.45 + taper * 0.55) * enabled;
-				gl.uniform4f(location, start?.x ?? 0, start?.y ?? 0, start?.z ?? 0, radius);
-				gl.uniform4f(endLocation, end?.x ?? 0, end?.y ?? 0, end?.z ?? 0, lavaControls.connectionBlend * enabled);
-			}
 			gl.uniform4f(
 				cursorLightLocation,
 				mouse.x,
@@ -677,20 +541,6 @@ export function BrandLavaField({
 			);
 			const cursorColor = cssColorToRgb(cursorLightRef.current.color, themeColors.lavaA);
 			gl.uniform3f(cursorLightColorLocation, cursorColor[0], cursorColor[1], cursorColor[2]);
-			for (const [index, location] of highlightLocations.entries()) {
-				const colorLocation = highlightColorLocations[index];
-				if (!location || !colorLocation) {
-					continue;
-				}
-				const highlight = highlightsRef.current[index];
-				const x = highlight?.x ?? 0;
-				const y = highlight?.y ?? 0;
-				const radius = highlight?.radius ?? 0.01;
-				const intensity = highlight?.intensity ?? 0;
-				const color = cssColorToRgb(highlight?.color ?? "transparent", themeColors.lavaA);
-				gl.uniform4f(location, x, y, radius, intensity);
-				gl.uniform3f(colorLocation, color[0], color[1], color[2]);
-			}
 			drawFullscreen(program, positionLocation);
 
 			animationFrame = requestAnimationFrame(render);
@@ -729,9 +579,11 @@ export function BrandLavaField({
 					"radial-gradient(circle at 46% 34%, color-mix(in srgb, var(--brand-lava-2, var(--auth-lava-2)) 28%, transparent), transparent 48%), linear-gradient(145deg, var(--card), var(--background))",
 			}}
 		>
-			<canvas ref={canvasRef} className="absolute inset-0 size-full" />
+			<canvas
+				ref={canvasRef}
+				className="absolute inset-0 size-full"
+				style={blurRadius > 0 ? { filter: `blur(${blurRadius}px)` } : undefined}
+			/>
 		</div>
 	);
 }
-
-export const LavaLampField = BrandLavaField;
