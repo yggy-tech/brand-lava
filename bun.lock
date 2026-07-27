@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "@yggy/brand-lava",
+      "name": "@yggy-tech/brand-lava",
       "devDependencies": {
         "@types/react": "^19.2.7",
         "@types/react-dom": "^19.2.3",
