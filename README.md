@@ -1,4 +1,4 @@
-# @drasil-ai/brand-lava
+# @yggy/brand-lava
 
 A configurable React and WebGL lava field for Drasil brand surfaces.
 
@@ -7,14 +7,14 @@ A configurable React and WebGL lava field for Drasil brand surfaces.
 Install the package:
 
 ```sh
-bun add @drasil-ai/brand-lava
+bun add @yggy/brand-lava
 ```
 
 ## Use
 
 ```tsx
-import { BrandLavaField } from "@drasil-ai/brand-lava";
-import "@drasil-ai/brand-lava/styles.css";
+import { BrandLavaField } from "@yggy/brand-lava";
+import "@yggy/brand-lava/styles.css";
 
 export function Hero() {
   return <BrandLavaField resolutionScale={0.5} />;
