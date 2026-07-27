@@ -1,15 +1,15 @@
 {
-  "name": "@drasil-ai/brand-lava",
+  "name": "@yggy/brand-lava",
   "version": "0.1.9",
   "description": "A configurable React and WebGL lava field for Drasil brand surfaces.",
   "license": "UNLICENSED",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/drasil-ai/brand-lava.git"
+    "url": "git+https://github.com/yggy-tech/brand-lava.git"
   },
-  "homepage": "https://github.com/drasil-ai/brand-lava#readme",
+  "homepage": "https://github.com/yggy-tech/brand-lava#readme",
   "bugs": {
-    "url": "https://github.com/drasil-ai/brand-lava/issues"
+    "url": "https://github.com/yggy-tech/brand-lava/issues"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.js",
