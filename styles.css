@@ -1,15 +1,15 @@
 :root {
-	--brand-lava-1: #d8f36a;
-	--brand-lava-2: #79b83f;
-	--brand-lava-3: #2f6f2f;
-	--brand-lava-highlight: #006b3c;
-	--brand-lava-cursor-light: #00864a;
+	--brand-lava-1: #316251;
+	--brand-lava-2: #454c79;
+	--brand-lava-3: #743179;
+	--brand-lava-highlight: #68a491;
+	--brand-lava-cursor-light: #454c79;
 }
 
 .dark {
-	--brand-lava-1: #e8ff7a;
-	--brand-lava-2: #9bd64a;
-	--brand-lava-3: #3f7f35;
-	--brand-lava-highlight: #007a43;
-	--brand-lava-cursor-light: #009957;
+	--brand-lava-1: #00644f;
+	--brand-lava-2: #aebaf3;
+	--brand-lava-3: #8c4df6;
+	--brand-lava-highlight: #68a491;
+	--brand-lava-cursor-light: #aebaf3;
 }

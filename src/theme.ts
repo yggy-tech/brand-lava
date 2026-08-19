@@ -1,4 +1,9 @@
-import type { Rgb, ThemeColors } from "./types";
+import type { BrandLavaColors, Rgb, ThemeColors } from "./types";
+
+/** Matches styles.css light defaults: primary / secondary / tertiary. */
+const FALLBACK_LAVA_A: Rgb = [49 / 255, 98 / 255, 81 / 255];
+const FALLBACK_LAVA_B: Rgb = [69 / 255, 76 / 255, 121 / 255];
+const FALLBACK_LAVA_C: Rgb = [116 / 255, 49 / 255, 121 / 255];
 
 export function cssColorToRgb(value: string, fallback: Rgb): Rgb {
 	const color = value.trim();
@@ -24,23 +29,15 @@ export function cssColorToRgb(value: string, fallback: Rgb): Rgb {
 	return fallback;
 }
 
-export function readThemeColors(): ThemeColors {
-	const styles = getComputedStyle(document.documentElement);
+export function readThemeColors(colors?: BrandLavaColors): ThemeColors {
+	const styles = typeof document === "undefined" ? undefined : getComputedStyle(document.documentElement);
+	const css = (name: string, legacy: string) => styles?.getPropertyValue(name) || styles?.getPropertyValue(legacy) || "";
 
 	return {
-		background: cssColorToRgb(styles.getPropertyValue("--background"), [0.94, 0.92, 0.9]),
-		card: cssColorToRgb(styles.getPropertyValue("--card"), [0.98, 0.98, 0.91]),
-		lavaA: cssColorToRgb(
-			styles.getPropertyValue("--brand-lava-1") || styles.getPropertyValue("--auth-lava-1"),
-			[0.58, 0.68, 0.34],
-		),
-		lavaB: cssColorToRgb(
-			styles.getPropertyValue("--brand-lava-2") || styles.getPropertyValue("--auth-lava-2"),
-			[0.39, 0.48, 0.24],
-		),
-		lavaC: cssColorToRgb(
-			styles.getPropertyValue("--brand-lava-3") || styles.getPropertyValue("--auth-lava-3"),
-			[0.27, 0.35, 0.16],
-		),
+		background: cssColorToRgb(css("--background", ""), [0.94, 0.92, 0.9]),
+		card: cssColorToRgb(css("--card", ""), [0.98, 0.98, 0.91]),
+		lavaA: cssColorToRgb(colors?.lava1 ?? css("--brand-lava-1", "--auth-lava-1"), FALLBACK_LAVA_A),
+		lavaB: cssColorToRgb(colors?.lava2 ?? css("--brand-lava-2", "--auth-lava-2"), FALLBACK_LAVA_B),
+		lavaC: cssColorToRgb(colors?.lava3 ?? css("--brand-lava-3", "--auth-lava-3"), FALLBACK_LAVA_C),
 	};
 }
