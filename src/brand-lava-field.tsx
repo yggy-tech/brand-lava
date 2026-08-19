@@ -219,6 +219,7 @@ function pushBlobPulse(
 export function BrandLavaField({
 	resolutionScale = 1,
 	blur,
+	colors,
 	cursorLight,
 	fieldInteraction,
 	satellites,
@@ -259,8 +260,13 @@ export function BrandLavaField({
 	const cursorLightRef = useRef({
 		radius: Math.max(0.01, Math.min(1, cursorLight?.radius ?? 0.34)),
 		intensity: clampUnit(cursorLight?.intensity ?? 0.7),
-		color: cursorLight?.color ?? "var(--brand-lava-cursor-light, var(--brand-lava-1, #94ad57))",
+		color:
+			cursorLight?.color ??
+			colors?.cursorLight ??
+			"var(--brand-lava-cursor-light, var(--brand-lava-1, #316251))",
 	});
+	const colorsRef = useRef(colors);
+	colorsRef.current = colors;
 
 	lavaControlsRef.current = normalizeLavaControls({
 		blobCount,
@@ -281,7 +287,10 @@ export function BrandLavaField({
 	cursorLightRef.current = {
 		radius: Math.max(0.01, Math.min(1, cursorLight?.radius ?? 0.34)),
 		intensity: clampUnit(cursorLight?.intensity ?? 0.7),
-		color: cursorLight?.color ?? "var(--brand-lava-cursor-light, var(--brand-lava-1, #94ad57))",
+		color:
+			cursorLight?.color ??
+			colors?.cursorLight ??
+			"var(--brand-lava-cursor-light, var(--brand-lava-1, #316251))",
 	};
 
 	useEffect(() => {
@@ -419,9 +428,9 @@ export function BrandLavaField({
 			gl.viewport(0, 0, canvas.width, canvas.height);
 		};
 
-		let themeColors = readThemeColors();
+		let themeColors = readThemeColors(colorsRef.current);
 		const observer = new MutationObserver(() => {
-			themeColors = readThemeColors();
+			themeColors = readThemeColors(colorsRef.current);
 		});
 		observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
 
@@ -454,6 +463,7 @@ export function BrandLavaField({
 			}
 
 			const lavaControls = lavaControlsRef.current;
+			themeColors = readThemeColors(colorsRef.current);
 			gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 			gl.viewport(0, 0, canvas.width, canvas.height);
 			activateProgram(gl, program);
@@ -575,6 +585,11 @@ export function BrandLavaField({
 			aria-hidden="true"
 			className="absolute inset-0"
 			style={{
+				...(colors?.lava1 ? { ["--brand-lava-1"]: colors.lava1 } : {}),
+				...(colors?.lava2 ? { ["--brand-lava-2"]: colors.lava2 } : {}),
+				...(colors?.lava3 ? { ["--brand-lava-3"]: colors.lava3 } : {}),
+				...(colors?.highlight ? { ["--brand-lava-highlight"]: colors.highlight } : {}),
+				...(colors?.cursorLight ? { ["--brand-lava-cursor-light"]: colors.cursorLight } : {}),
 				background:
 					"radial-gradient(circle at 46% 34%, color-mix(in srgb, var(--brand-lava-2, var(--auth-lava-2)) 28%, transparent), transparent 48%), linear-gradient(145deg, var(--card), var(--background))",
 			}}

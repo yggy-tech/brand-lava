@@ -7,9 +7,19 @@ export type BrandLavaStaticNode = {
 	radius: number;
 };
 
+export type BrandLavaColors = {
+	lava1?: string;
+	lava2?: string;
+	lava3?: string;
+	highlight?: string;
+	cursorLight?: string;
+};
+
 export type BrandLavaFieldProps = {
 	resolutionScale?: number;
 	blur?: number;
+	/** Blob and cursor colors. Omit a key to keep the CSS / package default. */
+	colors?: BrandLavaColors;
 	cursorLight?: {
 		radius?: number;
 		intensity?: number;

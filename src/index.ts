@@ -1,2 +1,7 @@
 export { BrandLavaField } from "./brand-lava-field";
-export type { BrandLavaDistribution, BrandLavaFieldProps, BrandLavaStaticNode } from "./types";
+export type {
+	BrandLavaColors,
+	BrandLavaDistribution,
+	BrandLavaFieldProps,
+	BrandLavaStaticNode,
+} from "./types";
