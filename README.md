@@ -20,6 +20,7 @@ export function Hero() {
   return (
     <BrandLavaField
       resolutionScale={0.5}
+      maxFps={30}
       colors={{
         lava1: "#316251",
         lava2: "#454c79",
@@ -31,10 +32,15 @@ export function Hero() {
 }
 ```
 
-The package exports `BrandLavaField` and its public prop and scene types.
+The package exports `BrandLavaField`, `DEFAULT_MAX_FPS` (45), and its public prop and scene types.
+
 `resolutionScale` multiplies the canvas pixel ratio from `0.25` to `1`;
 use `0.5` for large background surfaces. Reduced resolutions get a small
 CSS blur automatically; set `blur` in CSS pixels to override it.
+
+`maxFps` caps drawn frames per second (default `DEFAULT_MAX_FPS`, 45).
+Pass `maxFps={0}` to run uncapped at the display refresh rate. Apps such as
+Bifroest can override per surface without changing package defaults.
 
 Default blob colors follow the current brand scheme (teal, indigo, purple).
 Pass `colors` to override them per instance; omitted keys keep the CSS

@@ -18,6 +18,11 @@ export type BrandLavaColors = {
 export type BrandLavaFieldProps = {
 	resolutionScale?: number;
 	blur?: number;
+	/**
+	 * Cap drawn frames per second. Defaults to 45.
+	 * Pass `0` (or a non-positive value) to run uncapped at the display refresh rate.
+	 */
+	maxFps?: number;
 	/** Blob and cursor colors. Omit a key to keep the CSS / package default. */
 	colors?: BrandLavaColors;
 	cursorLight?: {
