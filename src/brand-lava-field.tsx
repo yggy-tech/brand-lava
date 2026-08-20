@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { getBlurRadius, getRenderSize } from "./resolution";
+import { DEFAULT_MAX_FPS, getBlurRadius, getMinFrameInterval, getRenderSize } from "./resolution";
 import { fragmentSource, vertexSource } from "./shaders";
 import { cssColorToRgb, readThemeColors } from "./theme";
 import type {
@@ -219,6 +219,7 @@ function pushBlobPulse(
 export function BrandLavaField({
 	resolutionScale = 1,
 	blur,
+	maxFps = DEFAULT_MAX_FPS,
 	colors,
 	cursorLight,
 	fieldInteraction,
@@ -442,7 +443,19 @@ export function BrandLavaField({
 			gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 		};
 
+		const minFrameInterval = getMinFrameInterval(maxFps);
+		let lastFrameTime = 0;
+
 		const render = (time: number) => {
+			if (minFrameInterval > 0) {
+				const elapsed = time - lastFrameTime;
+				if (elapsed < minFrameInterval) {
+					animationFrame = requestAnimationFrame(render);
+					return;
+				}
+				lastFrameTime = time - (elapsed % minFrameInterval);
+			}
+
 			if (
 				!program ||
 				!resolutionLocation ||
@@ -577,7 +590,7 @@ export function BrandLavaField({
 				gl.deleteProgram(program);
 			}
 		};
-	}, [resolutionScale]);
+	}, [resolutionScale, maxFps]);
 
 	return (
 		<div
