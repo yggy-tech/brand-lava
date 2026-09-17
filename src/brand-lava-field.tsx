@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { DEFAULT_MAX_FPS, getBlurRadius, getMinFrameInterval, getRenderSize } from "./resolution";
+import { createRng, hashSeed } from "./seed";
 import { fragmentSource, vertexSource } from "./shaders";
 import { cssColorToRgb, readThemeColors } from "./theme";
 import type {
@@ -94,28 +95,61 @@ function applyBounds(blob: BlobState, controls: ReturnType<typeof normalizeLavaC
 	blob.z = clampRange(blob.z, controls.boundsZ);
 }
 
-function createBlobStates(): BlobState[] {
-	return Array.from({ length: 12 }, (_, index) => ({
-		x: 0,
-		y: index === 0 ? -1.35 : index === 11 ? 1.48 : -1.05 + (index - 1) * 0.29,
-		z: 0,
-		vx: 0,
-		vy: 0,
-		targetX: 0,
-		targetY: index === 0 ? -1.35 : index === 11 ? 1.48 : -1.05 + (index - 1) * 0.29,
-		offsetX: 0,
-		offsetY: 0,
-		phase: index * 1.61803,
-		radiusSeed: Math.sin(index * 127.1) * 0.5 + 0.5,
-	}));
+function createBlobStates(seed: number | undefined): BlobState[] {
+	if (seed === undefined) {
+		return Array.from({ length: 12 }, (_, index) => ({
+			x: 0,
+			y: index === 0 ? -1.35 : index === 11 ? 1.48 : -1.05 + (index - 1) * 0.29,
+			z: 0,
+			vx: 0,
+			vy: 0,
+			targetX: 0,
+			targetY: index === 0 ? -1.35 : index === 11 ? 1.48 : -1.05 + (index - 1) * 0.29,
+			offsetX: 0,
+			offsetY: 0,
+			phase: index * 1.61803,
+			radiusSeed: Math.sin(index * 127.1) * 0.5 + 0.5,
+		}));
+	}
+
+	const rng = createRng(hashSeed(seed));
+	return Array.from({ length: 12 }, (_, index) => {
+		const baseY = index === 0 ? -1.35 : index === 11 ? 1.48 : -1.05 + (index - 1) * 0.29;
+		const jitterX = (rng() - 0.5) * 0.55;
+		const jitterY = (rng() - 0.5) * 0.35;
+		const y = index === 0 || index === 11 ? baseY : baseY + jitterY;
+		return {
+			x: jitterX,
+			y,
+			z: (rng() - 0.5) * 0.2,
+			vx: 0,
+			vy: 0,
+			targetX: jitterX,
+			targetY: y,
+			offsetX: 0,
+			offsetY: 0,
+			phase: rng() * Math.PI * 2,
+			radiusSeed: rng(),
+		};
+	});
 }
 
-function createSatelliteBlobs(): SatelliteBlob[] {
+function createSatelliteBlobs(seed: number | undefined): SatelliteBlob[] {
+	if (seed === undefined) {
+		return [
+			{ from: 1, to: 4, phase: 0.3, offset: 1 },
+			{ from: 3, to: 7, phase: 1.7, offset: -1 },
+			{ from: 6, to: 10, phase: 2.6, offset: 0.75 },
+			{ from: 8, to: 11, phase: 4.1, offset: -0.65 },
+		];
+	}
+
+	const rng = createRng(hashSeed(seed ^ 0x5a7e11));
 	return [
-		{ from: 1, to: 4, phase: 0.3, offset: 1 },
-		{ from: 3, to: 7, phase: 1.7, offset: -1 },
-		{ from: 6, to: 10, phase: 2.6, offset: 0.75 },
-		{ from: 8, to: 11, phase: 4.1, offset: -0.65 },
+		{ from: 1, to: 4, phase: rng() * Math.PI * 2, offset: rng() > 0.5 ? 1 : -1 },
+		{ from: 3, to: 7, phase: rng() * Math.PI * 2, offset: rng() > 0.5 ? 1 : -1 },
+		{ from: 6, to: 10, phase: rng() * Math.PI * 2, offset: rng() * 1.5 - 0.75 },
+		{ from: 8, to: 11, phase: rng() * Math.PI * 2, offset: rng() * 1.5 - 0.75 },
 	];
 }
 
@@ -220,6 +254,7 @@ export function BrandLavaField({
 	resolutionScale = 1,
 	blur,
 	maxFps = DEFAULT_MAX_FPS,
+	seed,
 	colors,
 	cursorLight,
 	fieldInteraction,
@@ -399,8 +434,8 @@ export function BrandLavaField({
 
 		const mouse = { x: 0.5, y: 0.5 };
 		const targetMouse = { x: 0.5, y: 0.5 };
-		const blobs = createBlobStates();
-		const satelliteBlobs = createSatelliteBlobs();
+		const blobs = createBlobStates(seed);
+		const satelliteBlobs = createSatelliteBlobs(seed);
 		const onMove = (event: PointerEvent) => {
 			const rect = root.getBoundingClientRect();
 			targetMouse.x = (event.clientX - rect.left) / rect.width;
@@ -590,7 +625,7 @@ export function BrandLavaField({
 				gl.deleteProgram(program);
 			}
 		};
-	}, [resolutionScale, maxFps]);
+	}, [resolutionScale, maxFps, seed]);
 
 	return (
 		<div
