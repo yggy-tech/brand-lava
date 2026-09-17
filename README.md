@@ -42,6 +42,11 @@ CSS blur automatically; set `blur` in CSS pixels to override it.
 Pass `maxFps={0}` to run uncapped at the display refresh rate. Apps such as
 Bifroest can override per surface without changing package defaults.
 
+`seed` drives a deterministic blob layout (phases, size variation, start
+offsets, satellite wiring). Omit it for the classic fixed layout; pass a new
+value each mount (e.g. `Date.now()`) for variety that is still reproducible
+when the same seed is reused.
+
 Default blob colors follow the current brand scheme (teal, indigo, purple).
 Pass `colors` to override them per instance; omitted keys keep the CSS
 defaults (`--brand-lava-1` … `--brand-lava-3`).

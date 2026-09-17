@@ -23,6 +23,11 @@ export type BrandLavaFieldProps = {
 	 * Pass `0` (or a non-positive value) to run uncapped at the display refresh rate.
 	 */
 	maxFps?: number;
+	/**
+	 * Deterministic layout seed for blob phases, sizes, and satellite wiring.
+	 * Omit for the classic fixed layout; pass a new value each mount for variety.
+	 */
+	seed?: number;
 	/** Blob and cursor colors. Omit a key to keep the CSS / package default. */
 	colors?: BrandLavaColors;
 	cursorLight?: {
