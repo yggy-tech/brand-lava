@@ -24,6 +24,15 @@ export const fragmentSource = `
 	uniform vec4 uCamera;
 	uniform vec4 uBlobSpheres[12];
 	uniform vec4 uStaticSpheres[3];
+	// x: fill, y: outline, z: outline width, w: one pixel (scene units)
+	uniform vec4 uStyle;
+	uniform vec3 uOutlineColor;
+	uniform float uTransparent;
+
+	// Premultiplied "over": paint color at coverage a on top of dst.
+	vec4 over(vec4 dst, vec3 color, float a) {
+		return vec4(color * a, a) + dst * (1.0 - a);
+	}
 
 	float smin(float a, float b, float k) {
 		float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
@@ -65,7 +74,7 @@ export const fragmentSource = `
 		));
 	}
 
-	vec3 shadeRay(vec2 uv, float time, out float travelOut, out float hitOut) {
+	vec4 shadeRay(vec2 uv, float time) {
 		vec3 orthographicOrigin = vec3(uv * uCamera.z, uCamera.y);
 		vec3 perspectiveDirection = normalize(vec3(uv * uCamera.z, -uCamera.w));
 		vec3 ro = mix(orthographicOrigin, vec3(0.0, 0.0, uCamera.y), uCamera.x);
@@ -73,10 +82,16 @@ export const fragmentSource = `
 		float travel = 0.0;
 		float hit = 0.0;
 		float maxDist = 7.0;
+		float closest = 8.0;
 
-		for (int i = 0; i < 68; i++) {
+		// Near-miss rays creep along the silhouette; the outline needs their closest approach.
+		for (int i = 0; i < 112; i++) {
+			if (i >= 68 && uStyle.y < 0.5) {
+				break;
+			}
 			vec3 pos = ro + rd * travel;
 			float d = mapField(pos, time * uLavaMotion.x);
+			closest = min(closest, d);
 
 			if (d < 0.0032) {
 				hit = 1.0;
@@ -96,10 +111,12 @@ export const fragmentSource = `
 		vec2 screenUv = gl_FragCoord.xy / uResolution.xy;
 		float cursorLight = smoothstep(uCursorLight.z, 0.0, length(screenUv - uMouse)) * uCursorLight.w;
 
+		vec4 result = vec4(color, 1.0) * (1.0 - uTransparent);
 		vec3 p = ro + rd * travel;
 		if (hit > 0.5) {
 			vec3 n = normalAt(p, time * uLavaMotion.x);
-			float fresnel = pow(1.0 - max(dot(n, -rd), 0.0), 2.0);
+			float grazing = 1.0 - max(dot(n, -rd), 0.0);
+			float fresnel = grazing * grazing;
 			float light = clamp(dot(n, normalize(vec3(-0.35, 0.7, 0.5))), 0.0, 1.0);
 			float glow = 1.0 - clamp(travel / maxDist, 0.0, 1.0);
 			float wave = sin(p.y * 3.2 + p.x * 1.25 + time * 0.75) * 0.5 + 0.5;
@@ -108,23 +125,26 @@ export const fragmentSource = `
 			lava = mix(lava, uLavaA, fresnel * 0.12 + glow * 0.06);
 			lava += uCard * fresnel * 0.08;
 			lava = mix(lava, uCursorLightColor, cursorLight * 0.18);
-			color = lava;
+			if (uStyle.x > 0.5) {
+				result = over(result, lava, 1.0);
+			}
+			// Soft inner edge at the silhouette so the band does not alias.
+			result = over(result, uOutlineColor, uStyle.y * smoothstep(0.82, 1.0, grazing));
+		} else {
+			float band = 1.0 - smoothstep(uStyle.z - uStyle.w, uStyle.z, closest);
+			result = over(result, uOutlineColor, uStyle.y * band);
 		}
 
-		travelOut = travel;
-		hitOut = hit;
-		return color;
+		return result;
 	}
 
 	void main() {
 		vec2 uv = (gl_FragCoord.xy / uResolution.xy - 0.5) * vec2(uResolution.x / uResolution.y, 1.0);
-		float travel = 0.0;
-		float hit = 0.0;
-		vec3 color = shadeRay(uv, uTime, travel, hit);
+		vec4 color = shadeRay(uv, uTime);
 
 		float vignette = smoothstep(1.35, 0.12, length(uv) * 1.05);
 		float dither = fract((gl_FragCoord.x + gl_FragCoord.y * 1.61803398875) * 0.5) - 0.5;
-		color += dither / 510.0;
-		gl_FragColor = vec4(color * mix(0.86, 1.04, vignette), 1.0);
+		vec3 rgb = (color.rgb + dither / 510.0 * color.a) * mix(0.86, 1.04, vignette);
+		gl_FragColor = vec4(min(rgb, vec3(color.a)), color.a);
 	}
 `;
