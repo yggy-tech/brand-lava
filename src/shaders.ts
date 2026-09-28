@@ -131,7 +131,7 @@ export const fragmentSource = `
 			// Soft inner edge at the silhouette so the band does not alias.
 			result = over(result, uOutlineColor, uStyle.y * smoothstep(0.82, 1.0, grazing));
 		} else {
-			float band = 1.0 - smoothstep(uStyle.z - uStyle.w, uStyle.z, closest);
+			float band = 1.0 - smoothstep(uStyle.z - uStyle.w * 0.5, uStyle.z + uStyle.w * 0.5, closest);
 			result = over(result, uOutlineColor, uStyle.y * band);
 		}
 

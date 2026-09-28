@@ -33,3 +33,15 @@ export function worldUnitsPerCssPixel(
 	const viewHeight = camera.projection === 1 ? (camera.scale * camera.distance) / camera.focalLength : camera.scale;
 	return viewHeight / Math.max(1, cssHeight);
 }
+
+/** Outline width and edge softness in scene units. Softness spans one CSS or canvas pixel, whichever is larger. */
+export function outlineEdge(
+	widthCss: number,
+	cssHeight: number,
+	canvasHeight: number,
+	camera: Parameters<typeof worldUnitsPerCssPixel>[1],
+): { width: number; softness: number } {
+	const cssPixel = worldUnitsPerCssPixel(cssHeight, camera);
+	const canvasPixel = cssPixel * (Math.max(1, cssHeight) / Math.max(1, canvasHeight));
+	return { width: widthCss * cssPixel, softness: Math.max(cssPixel, canvasPixel) };
+}

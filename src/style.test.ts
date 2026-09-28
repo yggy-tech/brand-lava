@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { normalizeLavaStyle, worldUnitsPerCssPixel } from "./style";
+import { normalizeLavaStyle, outlineEdge, worldUnitsPerCssPixel } from "./style";
 
 test("defaults to filled blobs on the theme background without an outline", () => {
 	expect(normalizeLavaStyle({})).toEqual({
@@ -40,4 +40,11 @@ test("converts CSS pixels to scene units for orthographic and perspective camera
 	expect(worldUnitsPerCssPixel(300, camera)).toBeCloseTo(1.5 / 300);
 	expect(worldUnitsPerCssPixel(300, { ...camera, projection: 1 })).toBeCloseTo((1.5 * 4) / 2 / 300);
 	expect(worldUnitsPerCssPixel(0, camera)).toBeCloseTo(1.5);
+});
+
+test("softens the outline edge over one canvas pixel when the canvas renders below CSS size", () => {
+	const camera = { projection: 0, distance: 4, scale: 1.5, focalLength: 2 };
+	const cssPixel = 1.5 / 400;
+	expect(outlineEdge(2, 400, 200, camera)).toEqual({ width: 2 * cssPixel, softness: 2 * cssPixel });
+	expect(outlineEdge(2, 400, 800, camera)).toEqual({ width: 2 * cssPixel, softness: cssPixel });
 });

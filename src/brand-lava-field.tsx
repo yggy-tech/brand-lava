@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { DEFAULT_MAX_FPS, getBlurRadius, getMinFrameInterval, getRenderSize } from "./resolution";
 import { createRng, hashSeed } from "./seed";
 import { fragmentSource, vertexSource } from "./shaders";
-import { normalizeLavaStyle, worldUnitsPerCssPixel } from "./style";
+import { normalizeLavaStyle, outlineEdge } from "./style";
 import { cssColorToRgb, readThemeColors } from "./theme";
 import type {
 	BlobState,
@@ -563,19 +563,13 @@ export function BrandLavaField({
 				lavaControls.cameraFocalLength,
 			);
 			const style = lavaStyleRef.current;
-			const pixel = worldUnitsPerCssPixel(cssHeight, {
+			const edge = outlineEdge(style.outlineWidth, cssHeight, canvas.height, {
 				projection: lavaControls.cameraProjection,
 				distance: lavaControls.cameraDistance,
 				scale: lavaControls.cameraScale,
 				focalLength: lavaControls.cameraFocalLength,
 			});
-			gl.uniform4f(
-				styleLocation,
-				style.fill ? 1 : 0,
-				style.outline ? 1 : 0,
-				style.outlineWidth * pixel,
-				pixel,
-			);
+			gl.uniform4f(styleLocation, style.fill ? 1 : 0, style.outline ? 1 : 0, edge.width, edge.softness);
 			const outlineColor = cssColorToRgb(style.outlineColor, themeColors.lavaA);
 			gl.uniform3f(outlineColorLocation, outlineColor[0], outlineColor[1], outlineColor[2]);
 			gl.uniform1f(transparentLocation, style.transparent ? 1 : 0);
