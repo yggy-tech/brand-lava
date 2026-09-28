@@ -72,7 +72,22 @@ export type BrandLavaFieldProps = {
 		strength?: number;
 		decay?: number;
 	};
+	/** Paint blob interiors. Defaults to `true`. With `false`, the outline turns on unless disabled. */
+	fill?: boolean;
+	/** Border around the merged blob silhouette. */
+	outline?: {
+		/** Defaults to `true` when `fill` is `false`, else `false`. */
+		enabled?: boolean;
+		/** CSS pixels, `0.5` to `24`. Defaults to `2`. */
+		width?: number;
+		/** Defaults to `colors.highlight`, then `--brand-lava-highlight`. */
+		color?: string;
+	};
+	/** `"transparent"` draws only the blobs so the page shows through. Defaults to `"theme"`. */
+	background?: BrandLavaBackground;
 };
+
+export type BrandLavaBackground = "theme" | "transparent";
 
 export type Rgb = readonly [number, number, number];
 

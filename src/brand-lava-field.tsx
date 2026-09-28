@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { DEFAULT_MAX_FPS, getBlurRadius, getMinFrameInterval, getRenderSize } from "./resolution";
 import { createRng, hashSeed } from "./seed";
 import { fragmentSource, vertexSource } from "./shaders";
+import { normalizeLavaStyle, worldUnitsPerCssPixel } from "./style";
 import { cssColorToRgb, readThemeColors } from "./theme";
 import type {
 	BlobState,
@@ -271,7 +272,13 @@ export function BrandLavaField({
 	attraction,
 	mergeSmoothness,
 	clickPulse,
+	fill,
+	outline,
+	background,
 }: BrandLavaFieldProps) {
+	const lavaStyle = normalizeLavaStyle({ fill, outline, background, colors });
+	const lavaStyleRef = useRef(lavaStyle);
+	lavaStyleRef.current = lavaStyle;
 	const blurRadius = getBlurRadius(resolutionScale, blur);
 	const rootRef = useRef<HTMLDivElement | null>(null);
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -363,6 +370,9 @@ export function BrandLavaField({
 		let lavaShapeLocation: WebGLUniformLocation | null = null;
 		let lavaMotionLocation: WebGLUniformLocation | null = null;
 		let cameraLocation: WebGLUniformLocation | null = null;
+		let styleLocation: WebGLUniformLocation | null = null;
+		let outlineColorLocation: WebGLUniformLocation | null = null;
+		let transparentLocation: WebGLUniformLocation | null = null;
 		let blobSphereLocations: (WebGLUniformLocation | null)[] = [];
 		let staticSphereLocations: (WebGLUniformLocation | null)[] = [];
 
@@ -388,6 +398,9 @@ export function BrandLavaField({
 			lavaShapeLocation = gl.getUniformLocation(createdProgram, "uLavaShape");
 			lavaMotionLocation = gl.getUniformLocation(createdProgram, "uLavaMotion");
 			cameraLocation = gl.getUniformLocation(createdProgram, "uCamera");
+			styleLocation = gl.getUniformLocation(createdProgram, "uStyle");
+			outlineColorLocation = gl.getUniformLocation(createdProgram, "uOutlineColor");
+			transparentLocation = gl.getUniformLocation(createdProgram, "uTransparent");
 			blobSphereLocations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) =>
 				gl.getUniformLocation(createdProgram, `uBlobSpheres[${index}]`),
 			);
@@ -409,6 +422,9 @@ export function BrandLavaField({
 				lavaShapeLocation === null ||
 				lavaMotionLocation === null ||
 				cameraLocation === null ||
+				styleLocation === null ||
+				outlineColorLocation === null ||
+				transparentLocation === null ||
 				blobSphereLocations.some((location) => location === null) ||
 				staticSphereLocations.some((location) => location === null) ||
 				positionLocation < 0
@@ -453,8 +469,10 @@ export function BrandLavaField({
 			targetMouse.y = 0.5;
 		};
 
+		let cssHeight = 1;
 		const resize = () => {
 			const rect = canvas.getBoundingClientRect();
+			cssHeight = rect.height;
 			[canvas.width, canvas.height] = getRenderSize(
 				rect.width,
 				rect.height,
@@ -505,7 +523,10 @@ export function BrandLavaField({
 				!cursorLightColorLocation ||
 				!lavaShapeLocation ||
 				!lavaMotionLocation ||
-				!cameraLocation
+				!cameraLocation ||
+				!styleLocation ||
+				!outlineColorLocation ||
+				!transparentLocation
 			) {
 				return;
 			}
@@ -541,6 +562,23 @@ export function BrandLavaField({
 				lavaControls.cameraScale,
 				lavaControls.cameraFocalLength,
 			);
+			const style = lavaStyleRef.current;
+			const pixel = worldUnitsPerCssPixel(cssHeight, {
+				projection: lavaControls.cameraProjection,
+				distance: lavaControls.cameraDistance,
+				scale: lavaControls.cameraScale,
+				focalLength: lavaControls.cameraFocalLength,
+			});
+			gl.uniform4f(
+				styleLocation,
+				style.fill ? 1 : 0,
+				style.outline ? 1 : 0,
+				style.outlineWidth * pixel,
+				pixel,
+			);
+			const outlineColor = cssColorToRgb(style.outlineColor, themeColors.lavaA);
+			gl.uniform3f(outlineColorLocation, outlineColor[0], outlineColor[1], outlineColor[2]);
+			gl.uniform1f(transparentLocation, style.transparent ? 1 : 0);
 			for (const [index, location] of blobSphereLocations.entries()) {
 				if (!location) {
 					continue;
@@ -638,8 +676,9 @@ export function BrandLavaField({
 				...(colors?.lava3 ? { ["--brand-lava-3"]: colors.lava3 } : {}),
 				...(colors?.highlight ? { ["--brand-lava-highlight"]: colors.highlight } : {}),
 				...(colors?.cursorLight ? { ["--brand-lava-cursor-light"]: colors.cursorLight } : {}),
-				background:
-					"radial-gradient(circle at 46% 34%, color-mix(in srgb, var(--brand-lava-2, var(--auth-lava-2)) 28%, transparent), transparent 48%), linear-gradient(145deg, var(--card), var(--background))",
+				background: lavaStyle.transparent
+					? undefined
+					: "radial-gradient(circle at 46% 34%, color-mix(in srgb, var(--brand-lava-2, var(--auth-lava-2)) 28%, transparent), transparent 48%), linear-gradient(145deg, var(--card), var(--background))",
 			}}
 		>
 			<canvas

@@ -47,6 +47,21 @@ offsets, satellite wiring). Omit it for the classic fixed layout; pass a new
 value each mount (e.g. `Date.now()`) for variety that is still reproducible
 when the same seed is reused.
 
+`fill`, `outline`, and `background` control how blobs are painted:
+
+```tsx
+<BrandLavaField fill={false} outline={{ width: 2, color: "#68a491" }} background="transparent" />
+```
+
+- `fill={false}` draws hollow blobs. The outline turns on by default so
+  blobs stay visible; pass `outline={{ enabled: false }}` to hide both.
+- `outline` draws a border around the merged blob silhouette. `width` is
+  in CSS pixels (`0.5` to `24`, default `2`). `color` defaults to
+  `colors.highlight`, then `--brand-lava-highlight`.
+- `background="transparent"` draws only the blobs, so the page behind the
+  field shows through. The default `"theme"` paints `--card` and
+  `--background`.
+
 Default blob colors follow the current brand scheme (teal, indigo, purple).
 Pass `colors` to override them per instance; omitted keys keep the CSS
 defaults (`--brand-lava-1` … `--brand-lava-3`).
