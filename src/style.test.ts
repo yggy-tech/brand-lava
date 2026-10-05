@@ -8,6 +8,8 @@ test("defaults to filled blobs on the theme background without an outline", () =
 		outlineWidth: 2,
 		outlineColor: "var(--brand-lava-highlight)",
 		transparent: false,
+		glow: 1,
+		vignette: 1,
 	});
 });
 
@@ -33,6 +35,14 @@ test("uses the outline color, then the highlight color, then the CSS highlight",
 
 test("renders a transparent background on request", () => {
 	expect(normalizeLavaStyle({ background: "transparent" }).transparent).toBe(true);
+});
+
+test("turns the centre glow and the edge vignette off at 0", () => {
+	expect(normalizeLavaStyle({ glow: 0, vignette: 0 })).toMatchObject({ glow: 0, vignette: 0 });
+});
+
+test("clamps glow and vignette to the 0 to 1 range", () => {
+	expect(normalizeLavaStyle({ glow: -1, vignette: 3 })).toMatchObject({ glow: 0, vignette: 1 });
 });
 
 test("converts CSS pixels to scene units for orthographic and perspective cameras", () => {
