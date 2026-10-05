@@ -275,8 +275,10 @@ export function BrandLavaField({
 	fill,
 	outline,
 	background,
+	glow,
+	vignette,
 }: BrandLavaFieldProps) {
-	const lavaStyle = normalizeLavaStyle({ fill, outline, background, colors });
+	const lavaStyle = normalizeLavaStyle({ fill, outline, background, colors, glow, vignette });
 	const lavaStyleRef = useRef(lavaStyle);
 	lavaStyleRef.current = lavaStyle;
 	const blurRadius = getBlurRadius(resolutionScale, blur);
@@ -373,6 +375,7 @@ export function BrandLavaField({
 		let styleLocation: WebGLUniformLocation | null = null;
 		let outlineColorLocation: WebGLUniformLocation | null = null;
 		let transparentLocation: WebGLUniformLocation | null = null;
+		let atmosphereLocation: WebGLUniformLocation | null = null;
 		let blobSphereLocations: (WebGLUniformLocation | null)[] = [];
 		let staticSphereLocations: (WebGLUniformLocation | null)[] = [];
 
@@ -401,6 +404,7 @@ export function BrandLavaField({
 			styleLocation = gl.getUniformLocation(createdProgram, "uStyle");
 			outlineColorLocation = gl.getUniformLocation(createdProgram, "uOutlineColor");
 			transparentLocation = gl.getUniformLocation(createdProgram, "uTransparent");
+			atmosphereLocation = gl.getUniformLocation(createdProgram, "uAtmosphere");
 			blobSphereLocations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) =>
 				gl.getUniformLocation(createdProgram, `uBlobSpheres[${index}]`),
 			);
@@ -425,6 +429,7 @@ export function BrandLavaField({
 				styleLocation === null ||
 				outlineColorLocation === null ||
 				transparentLocation === null ||
+				atmosphereLocation === null ||
 				blobSphereLocations.some((location) => location === null) ||
 				staticSphereLocations.some((location) => location === null) ||
 				positionLocation < 0
@@ -526,7 +531,8 @@ export function BrandLavaField({
 				!cameraLocation ||
 				!styleLocation ||
 				!outlineColorLocation ||
-				!transparentLocation
+				!transparentLocation ||
+				!atmosphereLocation
 			) {
 				return;
 			}
@@ -573,6 +579,7 @@ export function BrandLavaField({
 			const outlineColor = cssColorToRgb(style.outlineColor, themeColors.lavaA);
 			gl.uniform3f(outlineColorLocation, outlineColor[0], outlineColor[1], outlineColor[2]);
 			gl.uniform1f(transparentLocation, style.transparent ? 1 : 0);
+			gl.uniform2f(atmosphereLocation, style.glow, style.vignette);
 			for (const [index, location] of blobSphereLocations.entries()) {
 				if (!location) {
 					continue;

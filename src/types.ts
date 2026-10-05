@@ -85,6 +85,10 @@ export type BrandLavaFieldProps = {
 	};
 	/** `"transparent"` draws only the blobs so the page shows through. Defaults to `"theme"`. */
 	background?: BrandLavaBackground;
+	/** Strength of the tint the second lava colour casts on the centre of the background, 0 to 1. Defaults to `1`; `0` keeps the background flat. */
+	glow?: number;
+	/** Strength of the edge darkening over the whole field, blobs included, 0 to 1. Defaults to `1`; `0` turns it off. */
+	vignette?: number;
 };
 
 export type BrandLavaBackground = "theme" | "transparent";

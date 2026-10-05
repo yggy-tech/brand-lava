@@ -7,14 +7,22 @@ export type LavaStyle = {
 	outlineWidth: number;
 	outlineColor: string;
 	transparent: boolean;
+	/** 0 to 1, scales the centre tint. */
+	glow: number;
+	/** 0 to 1, scales the edge darkening. */
+	vignette: number;
 };
+
+const unit = (value: number | undefined) => Math.max(0, Math.min(1, value ?? 1));
 
 export function normalizeLavaStyle({
 	fill,
 	outline,
 	background,
 	colors,
-}: Pick<BrandLavaFieldProps, "fill" | "outline" | "background" | "colors">): LavaStyle {
+	glow,
+	vignette,
+}: Pick<BrandLavaFieldProps, "fill" | "outline" | "background" | "colors" | "glow" | "vignette">): LavaStyle {
 	const filled = fill !== false;
 	return {
 		fill: filled,
@@ -22,6 +30,8 @@ export function normalizeLavaStyle({
 		outlineWidth: Math.max(0.5, Math.min(24, outline?.width ?? 2)),
 		outlineColor: outline?.color ?? colors?.highlight ?? "var(--brand-lava-highlight)",
 		transparent: background === "transparent",
+		glow: unit(glow),
+		vignette: unit(vignette),
 	};
 }
 

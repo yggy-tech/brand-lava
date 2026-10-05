@@ -62,6 +62,15 @@ when the same seed is reused.
   field shows through. The default `"theme"` paints `--card` and
   `--background`.
 
+`glow` and `vignette` (both `0` to `1`, default `1`) scale the atmosphere:
+`glow` is the tint the second lava color casts on the centre of the
+background, `vignette` the edge darkening over the whole field. Set both
+to `0` for a flat, even surface such as a banner or a static frame:
+
+```tsx
+<BrandLavaField glow={0} vignette={0} />
+```
+
 Default blob colors follow the current brand scheme (teal, indigo, purple).
 Pass `colors` to override them per instance; omitted keys keep the CSS
 defaults (`--brand-lava-1` … `--brand-lava-3`).

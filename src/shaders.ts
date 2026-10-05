@@ -28,6 +28,8 @@ export const fragmentSource = `
 	uniform vec4 uStyle;
 	uniform vec3 uOutlineColor;
 	uniform float uTransparent;
+	// x: centre glow strength, y: edge vignette strength (both 0 to 1).
+	uniform vec2 uAtmosphere;
 
 	// Premultiplied "over": paint color at coverage a on top of dst.
 	vec4 over(vec4 dst, vec3 color, float a) {
@@ -107,7 +109,7 @@ export const fragmentSource = `
 		float paper = smoothstep(-0.9, 0.9, uv.y);
 		float warm = smoothstep(1.1, 0.0, length(uv - vec2(-0.05, -0.1)));
 		vec3 color = mix(uBackground, uCard, 0.42 + paper * 0.2);
-		color = mix(color, uLavaB, warm * 0.16);
+		color = mix(color, uLavaB, warm * 0.16 * uAtmosphere.x);
 		vec2 screenUv = gl_FragCoord.xy / uResolution.xy;
 		float cursorLight = smoothstep(uCursorLight.z, 0.0, length(screenUv - uMouse)) * uCursorLight.w;
 
@@ -144,7 +146,7 @@ export const fragmentSource = `
 
 		float vignette = smoothstep(1.35, 0.12, length(uv) * 1.05);
 		float dither = fract((gl_FragCoord.x + gl_FragCoord.y * 1.61803398875) * 0.5) - 0.5;
-		vec3 rgb = (color.rgb + dither / 510.0 * color.a) * mix(0.86, 1.04, vignette);
+		vec3 rgb = (color.rgb + dither / 510.0 * color.a) * mix(1.0, mix(0.86, 1.04, vignette), uAtmosphere.y);
 		gl_FragColor = vec4(min(rgb, vec3(color.a)), color.a);
 	}
 `;
