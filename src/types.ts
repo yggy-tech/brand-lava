@@ -90,8 +90,8 @@ export type BrandLavaFieldProps = {
 	/** Strength of the edge darkening over the whole field, blobs included, 0 to 1. Defaults to `1`; `0` turns it off. */
 	vignette?: number;
 	/**
-	 * Paint one still frame and stop. The blob is two flat colours: `colors.lava3`
-	 * and `colors.lava2`, with no lighting, vignette, or continued animation.
+	 * Paint one still frame and stop the loop. Shading stays the normal lava mix.
+	 * `speed` is treated as 0, so the surface does not ripple.
 	 */
 	frozen?: boolean;
 };

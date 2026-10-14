@@ -377,7 +377,6 @@ export function BrandLavaField({
 		let outlineColorLocation: WebGLUniformLocation | null = null;
 		let transparentLocation: WebGLUniformLocation | null = null;
 		let atmosphereLocation: WebGLUniformLocation | null = null;
-		let splitLocation: WebGLUniformLocation | null = null;
 		let blobSphereLocations: (WebGLUniformLocation | null)[] = [];
 		let staticSphereLocations: (WebGLUniformLocation | null)[] = [];
 
@@ -407,7 +406,6 @@ export function BrandLavaField({
 			outlineColorLocation = gl.getUniformLocation(createdProgram, "uOutlineColor");
 			transparentLocation = gl.getUniformLocation(createdProgram, "uTransparent");
 			atmosphereLocation = gl.getUniformLocation(createdProgram, "uAtmosphere");
-			splitLocation = gl.getUniformLocation(createdProgram, "uSplit");
 			blobSphereLocations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((index) =>
 				gl.getUniformLocation(createdProgram, `uBlobSpheres[${index}]`),
 			);
@@ -433,7 +431,6 @@ export function BrandLavaField({
 				outlineColorLocation === null ||
 				transparentLocation === null ||
 				atmosphereLocation === null ||
-				splitLocation === null ||
 				blobSphereLocations.some((location) => location === null) ||
 				staticSphereLocations.some((location) => location === null) ||
 				positionLocation < 0
@@ -536,8 +533,7 @@ export function BrandLavaField({
 				!styleLocation ||
 				!outlineColorLocation ||
 				!transparentLocation ||
-				!atmosphereLocation ||
-				!splitLocation
+				!atmosphereLocation
 			) {
 				return;
 			}
@@ -584,8 +580,7 @@ export function BrandLavaField({
 			const outlineColor = cssColorToRgb(style.outlineColor, themeColors.lavaA);
 			gl.uniform3f(outlineColorLocation, outlineColor[0], outlineColor[1], outlineColor[2]);
 			gl.uniform1f(transparentLocation, style.transparent ? 1 : 0);
-			gl.uniform2f(atmosphereLocation, frozen ? 0 : style.glow, frozen ? 0 : style.vignette);
-			gl.uniform1f(splitLocation, frozen ? 1 : 0);
+			gl.uniform2f(atmosphereLocation, style.glow, style.vignette);
 			for (const [index, location] of blobSphereLocations.entries()) {
 				if (!location) {
 					continue;
