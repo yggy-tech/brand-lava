@@ -28,6 +28,7 @@ export const fragmentSource = `
 	uniform vec4 uStyle;
 	uniform vec3 uOutlineColor;
 	uniform float uTransparent;
+	uniform float uSplit;
 	// x: centre glow strength, y: edge vignette strength (both 0 to 1).
 	uniform vec2 uAtmosphere;
 
@@ -123,10 +124,15 @@ export const fragmentSource = `
 			float glow = 1.0 - clamp(travel / maxDist, 0.0, 1.0);
 			float wave = sin(p.y * 3.2 + p.x * 1.25 + time * 0.75) * 0.5 + 0.5;
 
-			vec3 lava = mix(uLavaC, uLavaB, smoothstep(0.0, 1.0, wave * 0.22 + light * 0.56));
-			lava = mix(lava, uLavaA, fresnel * 0.12 + glow * 0.06);
-			lava += uCard * fresnel * 0.08;
-			lava = mix(lava, uCursorLightColor, cursorLight * 0.18);
+			vec3 lava;
+			if (uSplit > 0.5) {
+				lava = mix(uLavaC, uLavaB, smoothstep(0.46, 0.54, wave));
+			} else {
+				lava = mix(uLavaC, uLavaB, smoothstep(0.0, 1.0, wave * 0.22 + light * 0.56));
+				lava = mix(lava, uLavaA, fresnel * 0.12 + glow * 0.06);
+				lava += uCard * fresnel * 0.08;
+				lava = mix(lava, uCursorLightColor, cursorLight * 0.18);
+			}
 			if (uStyle.x > 0.5) {
 				result = over(result, lava, 1.0);
 			}
@@ -142,7 +148,8 @@ export const fragmentSource = `
 
 	void main() {
 		vec2 uv = (gl_FragCoord.xy / uResolution.xy - 0.5) * vec2(uResolution.x / uResolution.y, 1.0);
-		vec4 color = shadeRay(uv, uTime);
+		float shadeTime = uLavaMotion.x <= 0.0 ? 0.0 : uTime;
+		vec4 color = shadeRay(uv, shadeTime);
 
 		float vignette = smoothstep(1.35, 0.12, length(uv) * 1.05);
 		float dither = fract((gl_FragCoord.x + gl_FragCoord.y * 1.61803398875) * 0.5) - 0.5;
